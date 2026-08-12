@@ -1,0 +1,27 @@
+# Editor, Python, and local environment state
+.idea/
+.vscode/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.DS_Store
+.env
+.venv/
+
+# Previous nested-repository metadata retained locally during migration
+.git-metadata-backup/
+
+# Generated forward-simulation data (recreate with scripts/run_all.py)
+fibre_frame_event_sim/outputs/
+
+# Raw numerical reconstruction artifacts and execution logs
+isl_diff_event/results/**/*.npy
+isl_diff_event/results/logs/
+
+# Upstream v2e model checkpoints and sample videos
+v2e/input/
+
+# Papers are local research references, not project source
+Paper/*.pdf
+
