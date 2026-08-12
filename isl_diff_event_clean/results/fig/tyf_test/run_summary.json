@@ -1,0 +1,20 @@
+{
+  "input_path": "/home/robbie/tyf_data/2025-01-05_DVS_multicore_fibre_nolen_40x/move_50pics/dvSave-2025_01_04_21_56_09.aedat4",
+  "device": "cuda",
+  "frame_index": 11,
+  "event_count": 233736,
+  "event_window_us": 418341,
+  "frame_exposure_us": 200000,
+  "reconstruction_scale": 2,
+  "reconstruction_shape": [
+    520,
+    692
+  ],
+  "trajectory_piece_count": 12,
+  "trajectory_total_displacement_xy_px": [
+    11.122745513916016,
+    -0.002843608846887946
+  ],
+  "final_loss": 0.002006468106888334,
+  "contrast_threshold": 1.000001
+}

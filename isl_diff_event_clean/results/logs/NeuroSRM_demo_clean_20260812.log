@@ -1,0 +1,66 @@
+[setup] device=cuda input=/home/robbie/tyf_data/2025-01-05_DVS_multicore_fibre_nolen_40x/move_50pics/dvSave-2025_01_04_21_56_09.aedat4
+[data] frame=11 events=233736 exposure=200000us window=418341us
+[motion] iteration=   0 loss=-1.701529979706
+[motion] iteration= 100 loss=-6.218603610992
+[motion] iteration= 200 loss=-7.281014442444
+[motion] iteration= 300 loss=-7.592371940613
+[motion] iteration= 400 loss=-7.692663669586
+[motion] iteration= 500 loss=-7.722476959229
+[motion] iteration= 600 loss=-7.736261844635
+[motion] iteration= 700 loss=-7.743782043457
+[motion] iteration= 800 loss=-7.748026371002
+[motion] iteration= 900 loss=-7.752567768097
+[motion] iteration=1000 loss=-7.757813453674
+[motion] iteration=1100 loss=-7.761806488037
+[motion] iteration=1200 loss=-7.764360904694
+[motion] iteration=1300 loss=-7.767162799835
+[motion] iteration=1400 loss=-7.769029617310
+[motion] iteration=1500 loss=-7.770692348480
+[motion] iteration=1600 loss=-7.770379066467
+[motion] iteration=1700 loss=-7.770711898804
+[motion] iteration=1800 loss=-7.770240306854
+[motion] iteration=1900 loss=-7.768887042999
+[motion] iteration=2000 loss=-7.770017623901
+[joint-1x] iteration=   1 loss=-12.396684061115
+[joint-1x] iteration= 100 loss=-12.441776237764
+[joint-1x] iteration= 200 loss=-12.451359726614
+[joint-1x] iteration= 300 loss=-12.457333197696
+[joint-1x] iteration= 400 loss=-12.460693270573
+[joint-1x] iteration= 500 loss=-12.463801450671
+[joint-1x] iteration= 600 loss=-12.465295558437
+[joint-1x] iteration= 700 loss=-12.466445115931
+[joint-1x] iteration= 800 loss=-12.467088063017
+[joint-1x] iteration= 900 loss=-12.467629001935
+[joint-1x] iteration=1000 loss=-12.467988181331
+[joint-1x] iteration=1100 loss=-12.468239378676
+[joint-1x] iteration=1200 loss=-12.468417630088
+[joint-1x] iteration=1300 loss=-12.468541839379
+[joint-1x] iteration=1400 loss=-12.468629092766
+[joint-1x] iteration=1500 loss=-12.468689979005
+[joint-1x] iteration=1600 loss=-12.468734532658
+[joint-1x] iteration=1700 loss=-12.468762984504
+[joint-1x] iteration=1800 loss=-12.468786637033
+[joint-1x] iteration=1900 loss=-12.468800848459
+[joint-1x] iteration=2000 loss=-12.468811248570
+[reconstruct-2x] iteration=   0 loss=0.002109951107
+[reconstruct-2x] iteration= 100 loss=0.002165108374
+[reconstruct-2x] iteration= 200 loss=0.002082923074
+[reconstruct-2x] iteration= 300 loss=0.002027215379
+[reconstruct-2x] iteration= 400 loss=0.002019387565
+[reconstruct-2x] iteration= 500 loss=0.002014791032
+[reconstruct-2x] iteration= 600 loss=0.002012047618
+[reconstruct-2x] iteration= 700 loss=0.002010276699
+[reconstruct-2x] iteration= 800 loss=0.002009093048
+[reconstruct-2x] iteration= 900 loss=0.002008283212
+[reconstruct-2x] iteration=1000 loss=0.002007725797
+[reconstruct-2x] iteration=1100 loss=0.002007340122
+[reconstruct-2x] iteration=1200 loss=0.002007067306
+[reconstruct-2x] iteration=1300 loss=0.002006880215
+[reconstruct-2x] iteration=1400 loss=0.002006745997
+[reconstruct-2x] iteration=1500 loss=0.002006653320
+[reconstruct-2x] iteration=1600 loss=0.002006586184
+[reconstruct-2x] iteration=1700 loss=0.002006539207
+[reconstruct-2x] iteration=1800 loss=0.002006506199
+[reconstruct-2x] iteration=1900 loss=0.002006483690
+[reconstruct-2x] iteration=2000 loss=0.002006468107
+[done] results saved to results/fig/tyf_test
