@@ -15,7 +15,10 @@ def normalize_u8(array: np.ndarray) -> np.ndarray:
     span = float(value.max() - value.min())
     if span == 0:
         return np.ones_like(value, dtype=np.uint8)
-    return ((value - value.min()) / span * 255).astype(np.uint8)
+    # The legacy path gives a floating-point image to OpenCV, whose saturating
+    # conversion rounds to the nearest integer. Make that conversion explicit.
+    normalized = (value - value.min()) / span * 255
+    return np.rint(normalized).astype(np.uint8)
 
 
 def save_results(
@@ -101,7 +104,7 @@ def compare_result_directories(
             correlation = float(
                 np.corrcoef(candidate.reshape(-1), reference.reshape(-1))[0, 1]
             )
-        equivalent = normalized_rmse <= 2e-2 and correlation >= 0.95
+        equivalent = normalized_rmse <= 5e-3 and correlation >= 0.999
         report[candidate_path.stem] = {
             "shape_match": True,
             "allclose": bool(np.allclose(candidate, reference, rtol=1e-5, atol=1e-6)),

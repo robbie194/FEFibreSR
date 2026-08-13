@@ -231,6 +231,8 @@ def refine_at_sensor_scale(
     base_displacement = motion.segment_increments_xy.sum(dim=0).detach()
     direction = base_displacement.cpu().numpy()
     direction = direction / np.max(np.abs(direction))
+    valid_border = torch.zeros(config.sensor_shape, device=device)
+    valid_border[1:-1, 1:-1] = 1
 
     for iteration in range(config.reconstruction_iterations):
         optimizer.zero_grad()
@@ -254,8 +256,8 @@ def refine_at_sensor_scale(
                 scale,
                 config.event_splat_sigma,
                 signed=True,
-            )
-            predicted = predicted_iwe(log_image, displacement)
+            ) * valid_border
+            predicted = predicted_iwe(log_image, displacement) * valid_border
             event_loss = mean_square(
                 predicted / torch.linalg.vector_norm(predicted)
                 - target_iwe / torch.linalg.vector_norm(target_iwe)
@@ -381,14 +383,15 @@ def reconstruct_at_two_x(
             checkpoints.append(value)
             print(f"[reconstruct-2x] iteration={iteration:4d} loss={value:.12f}")
 
-    final_log = linear_log_intensity(image * 255, 1.000001) / np.log(255)
-    final_iwe = predicted_iwe(final_log, displacement) * valid_border
     return ReconstructionState(
         image=image.detach(),
         background=background.detach(),
         kernel=kernel,
         target_iwe=target_iwe,
-        predicted_iwe=final_iwe.detach(),
+        # The legacy output stores the IWE evaluated at the start of the final
+        # iteration, while image/background contain the parameters after its
+        # optimizer step. Keep that evaluation order for output compatibility.
+        predicted_iwe=image_iwe.detach(),
         loss_history=np.asarray(checkpoints),
     )
 

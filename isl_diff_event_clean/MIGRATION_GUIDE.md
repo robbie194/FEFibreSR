@@ -55,7 +55,7 @@
 | 第一轮 2100 次 `Dxy_pc` 优化 | `estimate_motion()` | Adam、学习率、StepLR、Gaussian blur、负 IWE 方差和轨迹正则项均保留。 |
 | 第一轮循环中的 `Dxy_pred` | `MotionEstimate.dense_trajectory_xy` | 特意保留旧版“最终 optimizer step 前计算的 dense trajectory”，用于匹配旧版求值顺序。 |
 | 第一轮循环后的 `Dxy_pc` | `MotionEstimate.segment_increments_xy` | 保留最终 optimizer step 后的段增量；因此它和 dense trajectory 存在旧版原有的一步时序差异。 |
-| `M=1` 的图像、背景、`Dxy_pc_pred` 联合优化 | `refine_at_sensor_scale()` | 图像、背景和轨迹仍在 1x 阶段共同优化；各损失项改为具名变量。 |
+| `M=1` 的图像、背景、`Dxy_pc_pred` 联合优化 | `refine_at_sensor_scale()` | 图像、背景和轨迹仍在 1x 阶段共同优化；各损失项改为具名变量，目标和预测 IWE 均保留旧版的一像素边界 mask。 |
 | `M=2` 的固定轨迹重建 | `reconstruct_at_two_x()` | 从 1x 图像上采样；轨迹和 PSF 固定，只优化 2x 图像与 1x 背景。 |
 | 顶层 `result_arrays`、`cv2.imwrite()`、`json.dump()` | `neurosr/output.py::save_results()` | 原始数组、显示图、运行摘要和对比总览统一保存。 |
 

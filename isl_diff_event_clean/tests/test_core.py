@@ -10,7 +10,7 @@ import torch
 from neurosr.events import bilinear_splat, gaussian_splat
 from neurosr.motion import PiecewiseLinearTrajectory
 from neurosr.optimization import block_average, predicted_iwe
-from neurosr.output import compare_result_directories
+from neurosr.output import compare_result_directories, normalize_u8
 
 
 class EventRenderingTests(unittest.TestCase):
@@ -53,6 +53,11 @@ class MotionAndImageTests(unittest.TestCase):
 
 
 class ResultComparisonTests(unittest.TestCase):
+    def test_display_normalization_rounds_like_opencv(self) -> None:
+        values = np.array([[0.0, 0.5, 1.5, 255.0]])
+        expected = np.array([[0, 0, 2, 255]], dtype=np.uint8)
+        np.testing.assert_array_equal(normalize_u8(values), expected)
+
     def test_small_numerical_drift_is_equivalent(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -68,6 +73,21 @@ class ResultComparisonTests(unittest.TestCase):
 
         self.assertTrue(report["shape_match"])
         self.assertTrue(report["numerically_equivalent"])
+
+    def test_structurally_different_result_is_not_equivalent(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            candidate = root / "candidate"
+            reference = root / "reference"
+            candidate.mkdir()
+            reference.mkdir()
+            baseline = np.linspace(0, 1, 100, dtype=np.float32)
+            np.save(reference / "image.npy", baseline)
+            np.save(candidate / "image.npy", baseline[::-1])
+
+            report = compare_result_directories(candidate, reference)["image"]
+
+        self.assertFalse(report["numerically_equivalent"])
 
 
 if __name__ == "__main__":

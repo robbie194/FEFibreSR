@@ -28,8 +28,8 @@ Compare its raw arrays with the frozen legacy result:
 The comparison prints both strict `allclose` results and a numerical-equivalence
 result. CUDA event splatting uses atomic accumulation, so repeated executions of
 the legacy script itself are not bit-for-bit reproducible. Numerical equivalence
-requires matching shapes, normalized RMSE at most 2%, and correlation at least
-0.95. Raw maximum error and RMSE remain visible in the report.
+requires matching shapes, normalized RMSE at most 0.5%, and correlation at least
+0.999. Raw maximum error and RMSE remain visible in the report.
 
 Use `--iterations 1` for a fast wiring check. It is not a meaningful
 reconstruction and cannot match the 2100-iteration baseline.
