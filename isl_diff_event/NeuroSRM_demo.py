@@ -371,10 +371,12 @@ Dxy_0_pc = flow_xy[1:,:] - flow_xy[:-1,:]
 Dxy_pred_0 = traj_model(Dxy_0_pc).squeeze().T
 Dxy_pc =  nn.Parameter(Dxy_0_pc.clone().to(device).float(), requires_grad=True)
 Dxy_pc_np = Dxy_pc.detach().cpu().numpy()
+# tyfQ 移动的单位是什么？
 # tyfA: Dxy_0_pc 的单位是像素（pixel），shape 为 [12, 2]。每一行是相邻
 # 配准事件帧之间的一段位移增量 [dx, dy]，不是 px/us 形式的速度。它可以是
 # 小数，因为 phase_cross_correlation 使用 upsample_factor=100 做亚像素配准。
 print("tyf Dxy_0_pc ", Dxy_0_pc)
+# tyfQ 连续运动轨迹的单位是什么，一共多长？后面没用啊？
 # tyfA: Dxy_pred_0 的单位仍是像素，shape 为 [2, win + 1]；本次 win=418341，
 # 所以共有 418342 个采样点，分别表示从 0 到 418341 us 每一微秒处的累计
 # 位移 [x(t), y(t)]。这个带 ``_0`` 的变量只用于检查初始化结果，后面没有直接
@@ -389,6 +391,7 @@ print("tyf Dxy_pc_np ", Dxy_pc_np) # 和 Dxy_0_pc 一样
 # ``-var(abs(IWE)) + trajectory_regularization``。IWE 越集中，方差通常越大，
 # 因此负方差越小代表运动估计越好；优化变量是 ``Dxy_pc`` [K,2]。
 
+# tyfQ 所以下面这一段是将2个frame时间内的事件进行warp对吗，因为前面的win是两个frame了，warp到第一个参考时刻？
 # tyfA: 是的。这里使用从第 frame_ind 张 APS 曝光开始，到下一张 APS 曝光
 # 结束的整个事件窗口；本次跨度为 418341 us。它覆盖两次曝光及两次曝光之间的
 # 时间间隔，因此更准确地说是“双曝光跨度”，不只是两段各 200000 us 的曝光相加。
