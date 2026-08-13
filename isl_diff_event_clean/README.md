@@ -34,6 +34,10 @@ requires matching shapes, normalized RMSE at most 2%, and correlation at least
 Use `--iterations 1` for a fast wiring check. It is not a meaningful
 reconstruction and cannot match the 2100-iteration baseline.
 
+For a stage-by-stage and function-by-function mapping from the legacy script,
+including the reason each unused experiment was not migrated, see
+[`MIGRATION_GUIDE.md`](MIGRATION_GUIDE.md).
+
 ## Code map
 
 - `neurosr/config.py`: explicit experiment parameters.
