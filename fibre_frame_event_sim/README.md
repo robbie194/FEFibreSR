@@ -6,6 +6,8 @@
 
 关于 `sigma_um=0`、0.1 ms 时间步长、APS 积分结果和固定芯斑事件极性的专项核验，见 [FOUR_QUESTIONS_SIGMA_TIME_APS_EVENTS.md](FOUR_QUESTIONS_SIGMA_TIME_APS_EVENTS.md)。
 
+关于固定近端芯斑事件是否还能用于重建、如何构造 fibre-aware 事件损失，以及怎样基于 clean 工程实现新重建入口，见 [FIBRE_EVENT_RECONSTRUCTION_ANALYSIS.md](FIBRE_EVENT_RECONSTRUCTION_ANALYSIS.md)。
+
 ## 基线链路
 
 ```text
