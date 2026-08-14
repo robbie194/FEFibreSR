@@ -4,6 +4,8 @@
 
 实现完成后的常见疑问、参数来源和当前能力边界见 [IMPLEMENTATION_QA.md](IMPLEMENTATION_QA.md)。
 
+关于 `sigma_um=0`、0.1 ms 时间步长、APS 积分结果和固定芯斑事件极性的专项核验，见 [FOUR_QUESTIONS_SIGMA_TIME_APS_EVENTS.md](FOUR_QUESTIONS_SIGMA_TIME_APS_EVENTS.md)。
+
 ## 基线链路
 
 ```text
