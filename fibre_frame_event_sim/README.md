@@ -2,6 +2,8 @@
 
 本目录只完成前向数据生成，不包含 NeuroSR 重建。输入是仓库根目录的 `分辨率板.png`，输出是同一曝光窗口内的一帧 APS 图像与一条时间对齐的事件流。
 
+实现完成后的常见疑问、参数来源和当前能力边界见 [IMPLEMENTATION_QA.md](IMPLEMENTATION_QA.md)。
+
 ## 基线链路
 
 ```text
