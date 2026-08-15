@@ -105,3 +105,6 @@ The cross-case results are in
 `results/fibre_neurosr/phase2_xy_sigma_sweep`. See
 [`TWO_DIMENSIONAL_RECONSTRUCTION_REPORT.md`](TWO_DIMENSIONAL_RECONSTRUCTION_REPORT.md)
 for the trajectory, sigma-aware forward model, metrics, and interpretation.
+The critical interpretation of the current results and the next simulation
+roadmap are documented in
+[`PHASE2_RECONSTRUCTION_QUESTIONS_AND_SIMULATION_ROADMAP.md`](PHASE2_RECONSTRUCTION_QUESTIONS_AND_SIMULATION_ROADMAP.md).
