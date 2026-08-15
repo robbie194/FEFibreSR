@@ -1,0 +1,88 @@
+{
+  "method": "scheme_A_core_aggregated_events",
+  "simulation_config": "/home/robbie/tyf_code/EventCode/myFEFibreSR/fibre_frame_event_sim/configs/phase1_usaf.yaml",
+  "data_root": "/home/robbie/tyf_code/EventCode/myFEFibreSR/fibre_frame_event_sim/outputs/phase1_usaf",
+  "device": "cuda",
+  "latent_shape": [
+    112,
+    112
+  ],
+  "event_time_stride": 5,
+  "event_weight": 0.03,
+  "tv_weight": 0.0015,
+  "grin_sigma_um": 0.0,
+  "core_count": 1415,
+  "selected_pixels_per_core": 4,
+  "observable_crop_yx": [
+    41,
+    359,
+    35,
+    356
+  ],
+  "forward_validation": {
+    "core_signal_mae": 0.00024960856535471976,
+    "core_signal_rmse": 0.0005949102342128754,
+    "core_signal_max_abs_error": 0.003581702709197998,
+    "core_signal_correlation": 0.9999979224736116,
+    "truth_event_residual_mae": 0.024789951741695404,
+    "truth_event_residual_rmse": 0.05447614565491676,
+    "truth_event_correlation": 0.9909002686123995,
+    "random_event_residual_mae": 0.17634686827659607
+  },
+  "initial_metrics_on_observable_region": {
+    "psnr_db": 14.756195548165502,
+    "ssim": 0.6106349696238895,
+    "mae": 0.10054135322570801,
+    "rmse": 0.1828901171684265,
+    "correlation": 0.8349246370794167
+  },
+  "reconstructions": {
+    "aps_only": {
+      "mode": "aps_only",
+      "optimisation_inputs": "APS only",
+      "metrics_on_observable_region": {
+        "psnr_db": 15.76134795314478,
+        "ssim": 0.7275973938223684,
+        "mae": 0.07326329499483109,
+        "rmse": 0.1629043072462082,
+        "correlation": 0.8692561126493362
+      },
+      "aps_reprojection_rmse": 0.001829852582886815,
+      "event_residual_mae": 0.0726202130317688,
+      "event_residual_rmse": 0.18843011558055878,
+      "iterations": 1200
+    },
+    "events_only": {
+      "mode": "events_only",
+      "optimisation_inputs": "events only",
+      "metrics_on_observable_region": {
+        "psnr_db": 4.833447085201161,
+        "ssim": 0.4647155682570963,
+        "mae": 0.5240172743797302,
+        "rmse": 0.5732283592224121,
+        "correlation": 0.8193642400598595
+      },
+      "aps_reprojection_rmse": 0.5514524579048157,
+      "event_residual_mae": 0.017199942842125893,
+      "event_residual_rmse": 0.035441938787698746,
+      "iterations": 1200
+    },
+    "joint": {
+      "mode": "joint",
+      "optimisation_inputs": "APS and events",
+      "metrics_on_observable_region": {
+        "psnr_db": 17.1579726068057,
+        "ssim": 0.7667340862209806,
+        "mae": 0.059243734925985336,
+        "rmse": 0.1387079507112503,
+        "correlation": 0.9071071759362498
+      },
+      "aps_reprojection_rmse": 0.008144631050527096,
+      "event_residual_mae": 0.024584496393799782,
+      "event_residual_rmse": 0.053885169327259064,
+      "iterations": 1200
+    }
+  },
+  "elapsed_seconds": 11.2709219455719,
+  "truth_usage": "forward parity and evaluation only; never an optimisation input"
+}

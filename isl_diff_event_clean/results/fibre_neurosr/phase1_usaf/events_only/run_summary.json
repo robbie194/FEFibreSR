@@ -1,0 +1,15 @@
+{
+  "mode": "events_only",
+  "optimisation_inputs": "events only",
+  "metrics_on_observable_region": {
+    "psnr_db": 4.833447085201161,
+    "ssim": 0.4647155682570963,
+    "mae": 0.5240172743797302,
+    "rmse": 0.5732283592224121,
+    "correlation": 0.8193642400598595
+  },
+  "aps_reprojection_rmse": 0.5514524579048157,
+  "event_residual_mae": 0.017199942842125893,
+  "event_residual_rmse": 0.035441938787698746,
+  "iterations": 1200
+}

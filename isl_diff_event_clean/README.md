@@ -38,6 +38,34 @@ For a stage-by-stage and function-by-function mapping from the legacy script,
 including the reason each unused experiment was not migrated, see
 [`MIGRATION_GUIDE.md`](MIGRATION_GUIDE.md).
 
+## Fibre-aware APS + event reconstruction
+
+`FibreNeuroSR_demo.py` implements Scheme A from
+`../fibre_frame_event_sim/FIBRE_EVENT_RECONSTRUCTION_ANALYSIS.md`. It is a
+separate physical model for the fixed-near-end fibre experiment and does not
+change the verified legacy-equivalent `NeuroSRM_demo.py`.
+
+Run the complete APS-only, events-only, and joint comparison:
+
+```bash
+cd isl_diff_event_clean
+MPLBACKEND=Agg /home/robbie/miniconda3/envs/NeuroFibreSR/bin/python \
+  FibreNeuroSR_demo.py
+```
+
+Use a short wiring check while editing:
+
+```bash
+/home/robbie/miniconda3/envs/NeuroFibreSR/bin/python \
+  FibreNeuroSR_demo.py --iterations 2 --modes joint --output /tmp/fibre_smoke
+```
+
+The formal result is in `results/fibre_neurosr/phase1_usaf`. The joint run
+reaches 17.16 dB PSNR and 0.767 SSIM on the observable object region, compared
+with 15.76 dB and 0.728 for APS-only. See
+[`FIBRE_NEUROSR_IMPLEMENTATION.md`](FIBRE_NEUROSR_IMPLEMENTATION.md) for the
+data contract, forward model, loss, verification evidence, and limitations.
+
 ## Code map
 
 - `neurosr/config.py`: explicit experiment parameters.
@@ -47,3 +75,8 @@ including the reason each unused experiment was not migrated, see
 - `neurosr/optimization.py`: image model, losses, blur, and AdamP.
 - `neurosr/pipeline.py`: readable end-to-end stage orchestration.
 - `neurosr/output.py`: stable artifacts and numerical comparison.
+- `neurosr/fibre_data.py`: flat-field core calibration and APS/event aggregation.
+- `neurosr/fibre_forward.py`: differentiable moving-object/core-aperture model.
+- `neurosr/fibre_event_loss.py`: v2e-compatible event response and regularisers.
+- `neurosr/fibre_pipeline.py`: fibre-aware validation, optimisation, and baselines.
+- `neurosr/fibre_output.py`: reconstruction metrics and diagnostic figures.

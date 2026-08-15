@@ -1,0 +1,15 @@
+{
+  "mode": "joint",
+  "optimisation_inputs": "APS and events",
+  "metrics_on_observable_region": {
+    "psnr_db": 17.1579726068057,
+    "ssim": 0.7667340862209806,
+    "mae": 0.059243734925985336,
+    "rmse": 0.1387079507112503,
+    "correlation": 0.9071071759362498
+  },
+  "aps_reprojection_rmse": 0.008144631050527096,
+  "event_residual_mae": 0.024584496393799782,
+  "event_residual_rmse": 0.053885169327259064,
+  "iterations": 1200
+}
