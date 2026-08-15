@@ -14,7 +14,7 @@ from fibre_sim.aps import integrate_aps_frame
 from fibre_sim.config import derived_parameters, load_config
 from fibre_sim.events import generate_v2e_events
 from fibre_sim.fibre import generate_hex_core_centres, simulate_fibre_sequence
-from fibre_sim.motion import uniform_motion
+from fibre_sim.motion import motion_from_config, piecewise_linear_motion, uniform_motion
 from fibre_sim.relay import relay_to_sensor_sequence
 from fibre_sim.visualize import split_events_by_time
 
@@ -36,6 +36,40 @@ class ConfigAndMotionTests(unittest.TestCase):
         times, shifts = uniform_motion(0.025, 0.0001, (180.0, 0.0))
         self.assertEqual(len(times), 251)
         np.testing.assert_allclose(shifts[-1], (4.5, 0.0))
+
+    def test_piecewise_xy_motion_hits_both_legs(self):
+        times, shifts = piecewise_linear_motion(
+            0.05,
+            0.0001,
+            [0.0, 0.025, 0.05],
+            [[0.0, 0.0], [4.5, 0.0], [4.5, 4.5]],
+        )
+        self.assertEqual(len(times), 501)
+        np.testing.assert_allclose(shifts[250], (4.5, 0.0), atol=1e-7)
+        np.testing.assert_allclose(shifts[-1], (4.5, 4.5), atol=1e-7)
+        np.testing.assert_allclose(np.diff(shifts[:251, 1]), 0.0, atol=1e-7)
+        np.testing.assert_allclose(np.diff(shifts[250:, 0]), 0.0, atol=1e-7)
+
+    def test_motion_config_dispatch_is_backward_compatible(self):
+        times, shifts = motion_from_config(
+            {
+                "duration_s": 0.025,
+                "dt_s": 0.0001,
+                "velocity_um_s": [180.0, 0.0],
+            }
+        )
+        self.assertEqual(len(times), 251)
+        np.testing.assert_allclose(shifts[-1], (4.5, 0.0))
+
+    def test_xy_sigma_configs_share_the_same_trajectory(self):
+        sigma0 = load_config(PROJECT_ROOT / "configs" / "phase2_xy_usaf_sigma0.yaml")
+        sigma08 = load_config(PROJECT_ROOT / "configs" / "phase2_xy_usaf_sigma08.yaml")
+        times0, shifts0 = motion_from_config(sigma0["motion"])
+        times08, shifts08 = motion_from_config(sigma08["motion"])
+        np.testing.assert_array_equal(times0, times08)
+        np.testing.assert_array_equal(shifts0, shifts08)
+        self.assertEqual(float(sigma0["grin"]["sigma_um"]), 0.0)
+        self.assertEqual(float(sigma08["grin"]["sigma_um"]), 0.8)
 
 
 class OpticalModuleTests(unittest.TestCase):

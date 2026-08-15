@@ -15,7 +15,7 @@ from .events import generate_v2e_events, write_events_h5
 from .fibre import generate_hex_core_centres, simulate_fibre_sequence
 from .grin import simulate_grin_sequence
 from .io_utils import ensure_dir, read_sequence_h5, write_json, write_sequence_h5
-from .motion import uniform_motion
+from .motion import motion_from_config
 from .relay import relay_to_sensor_sequence
 from .source import prepare_source
 from .visualize import (
@@ -63,11 +63,7 @@ def prepare_source_step(cfg: dict[str, Any]) -> Path:
 def generate_motion_step(cfg: dict[str, Any]) -> Path:
     folder = ensure_dir(output_root(cfg) / "01_motion")
     motion_cfg = cfg["motion"]
-    timestamps, shifts = uniform_motion(
-        float(motion_cfg["duration_s"]),
-        float(motion_cfg["dt_s"]),
-        tuple(motion_cfg["velocity_um_s"]),
-    )
+    timestamps, shifts = motion_from_config(motion_cfg)
     np.savez(folder / "motion.npz", timestamps_s=timestamps, shifts_xy_um=shifts)
     with (folder / "trajectory.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
@@ -77,9 +73,12 @@ def generate_motion_step(cfg: dict[str, Any]) -> Path:
     write_json(
         folder / "metadata.json",
         {
+            "trajectory": str(motion_cfg.get("trajectory", "uniform")),
             "sample_count": len(timestamps),
             "interval_count": len(timestamps) - 1,
             "dt_s": float(motion_cfg["dt_s"]),
+            "shift_min_xy_um": shifts.min(axis=0).tolist(),
+            "shift_max_xy_um": shifts.max(axis=0).tolist(),
             "final_shift_xy_um": shifts[-1].tolist(),
         },
     )
@@ -284,9 +283,12 @@ def validate_outputs_step(cfg: dict[str, Any]) -> Path:
         "shape": list(source.shape), "min": float(source.min()), "max": float(source.max()),
     }
     motion = np.load(root / "01_motion" / "motion.npz")
-    expected_shift = np.asarray(cfg["motion"]["velocity_um_s"]) * float(cfg["motion"]["duration_s"])
+    expected_times, expected_shifts = motion_from_config(cfg["motion"])
     checks["motion"] = {
-        "passed": len(motion["timestamps_s"]) == derived["time_samples"] and np.allclose(motion["shifts_xy_um"][-1], expected_shift),
+        "passed": (
+            np.allclose(motion["timestamps_s"], expected_times)
+            and np.allclose(motion["shifts_xy_um"], expected_shifts)
+        ),
         "sample_count": len(motion["timestamps_s"]), "final_shift_xy_um": motion["shifts_xy_um"][-1].tolist(),
     }
     for key, relative, shape in (

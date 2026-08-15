@@ -1,0 +1,517 @@
+{
+  "experiment": "two_dimensional_L_scan_GRIN_sigma_sweep",
+  "trajectory": [
+    [
+      0.0,
+      0.0
+    ],
+    [
+      4.5,
+      0.0
+    ],
+    [
+      4.5,
+      4.5
+    ]
+  ],
+  "cases": {
+    "sigma0": {
+      "simulation_validation": {
+        "all_passed": true,
+        "checks": {
+          "source": {
+            "passed": true,
+            "shape": [
+              400,
+              400
+            ],
+            "min": 0.05000000074505806,
+            "max": 1.0
+          },
+          "motion": {
+            "passed": true,
+            "sample_count": 501,
+            "final_shift_xy_um": [
+              4.5,
+              4.5
+            ]
+          },
+          "grin": {
+            "passed": true,
+            "shape": [
+              501,
+              320,
+              320
+            ],
+            "min": 0.05000000074505806,
+            "max": 1.0
+          },
+          "fibre": {
+            "passed": true,
+            "shape": [
+              501,
+              320,
+              320
+            ],
+            "min": 0.0,
+            "max": 0.9999998211860657
+          },
+          "sensor": {
+            "passed": true,
+            "shape": [
+              501,
+              260,
+              346
+            ],
+            "min": 0.0,
+            "max": 0.9999998807907104
+          },
+          "aps": {
+            "passed": true,
+            "shape": [
+              260,
+              346
+            ],
+            "min": 0.0,
+            "max": 0.9999998807907104
+          },
+          "events": {
+            "passed": true,
+            "count": 137167,
+            "on_count": 63342,
+            "off_count": 73825
+          }
+        },
+        "derived_parameters": {
+          "source_shape_px": [
+            400,
+            400
+          ],
+          "source_field_size_um": [
+            200.0,
+            200.0
+          ],
+          "fibre_shape_px": [
+            320,
+            320
+          ],
+          "time_intervals": 500,
+          "time_samples": 501,
+          "relay_magnification": 30.0625,
+          "fibre_pitch_on_sensor_px": 7.3125,
+          "fibre_diameter_on_sensor_px": 4.7124999999999995
+        }
+      },
+      "event_stats": {
+        "count": 137167,
+        "on_count": 63342,
+        "off_count": 73825,
+        "first_timestamp_s": 0.00039999998989515007,
+        "last_timestamp_s": 0.05000000074505806,
+        "device_used": "cuda",
+        "coordinate_order": "t_s,x,y,polarity"
+      },
+      "reconstruction": {
+        "method": "scheme_A_core_aggregated_events",
+        "simulation_config": "/home/robbie/tyf_code/EventCode/myFEFibreSR/fibre_frame_event_sim/configs/phase2_xy_usaf_sigma0.yaml",
+        "data_root": "/home/robbie/tyf_code/EventCode/myFEFibreSR/fibre_frame_event_sim/outputs/phase2_xy_usaf_sigma0",
+        "device": "cuda",
+        "latent_shape": [
+          112,
+          112
+        ],
+        "event_time_stride": 5,
+        "event_weight": 0.03,
+        "tv_weight": 0.005,
+        "grin_sigma_um": 0.0,
+        "core_count": 1415,
+        "selected_pixels_per_core": 4,
+        "observable_crop_yx": [
+          32,
+          359,
+          35,
+          356
+        ],
+        "trajectory_range_xy_um": [
+          4.5,
+          4.5
+        ],
+        "trajectory_path_length_um": 9.0,
+        "forward_validation": {
+          "core_signal_mae": 0.00019758443522732705,
+          "core_signal_rmse": 0.0005518436664715409,
+          "core_signal_max_abs_error": 0.005311071872711182,
+          "core_signal_correlation": 0.9999982446489436,
+          "truth_event_residual_mae": 0.03320668265223503,
+          "truth_event_residual_rmse": 0.06422506272792816,
+          "truth_event_correlation": 0.9935632215906873,
+          "random_event_residual_mae": 0.2504613697528839
+        },
+        "initial_metrics_on_observable_region": {
+          "psnr_db": 14.764635445958604,
+          "ssim": 0.6001440123785257,
+          "mae": 0.10338136553764343,
+          "rmse": 0.18271249532699585,
+          "correlation": 0.8430263960252768,
+          "gradient_x_correlation": 0.17689079676554487,
+          "gradient_y_correlation": 0.14632956033349925,
+          "gradient_x_rmse": 0.11812981218099594,
+          "gradient_y_rmse": 0.10245539247989655
+        },
+        "reconstructions": {
+          "aps_only": {
+            "mode": "aps_only",
+            "optimisation_inputs": "APS only",
+            "metrics_on_observable_region": {
+              "psnr_db": 16.196633484000706,
+              "ssim": 0.7448258312396163,
+              "mae": 0.06736627221107483,
+              "rmse": 0.15494170784950256,
+              "correlation": 0.886641364586083,
+              "gradient_x_correlation": 0.3971304928065439,
+              "gradient_y_correlation": 0.25172611103036735,
+              "gradient_x_rmse": 0.10981691628694534,
+              "gradient_y_rmse": 0.10036645829677582
+            },
+            "aps_reprojection_rmse": 0.004413144197314978,
+            "event_residual_mae": 0.07810048013925552,
+            "event_residual_rmse": 0.187722310423851,
+            "iterations": 1200
+          },
+          "events_only": {
+            "mode": "events_only",
+            "optimisation_inputs": "events only",
+            "metrics_on_observable_region": {
+              "psnr_db": 4.763492358678598,
+              "ssim": 0.4884138266874212,
+              "mae": 0.5272188186645508,
+              "rmse": 0.5778636336326599,
+              "correlation": 0.884983423216591,
+              "gradient_x_correlation": 0.4626197022138389,
+              "gradient_y_correlation": 0.4480297833597856,
+              "gradient_x_rmse": 0.11071383953094482,
+              "gradient_y_rmse": 0.0968499481678009
+            },
+            "aps_reprojection_rmse": 0.5575245022773743,
+            "event_residual_mae": 0.021905867382884026,
+            "event_residual_rmse": 0.04166187345981598,
+            "iterations": 1200
+          },
+          "joint": {
+            "mode": "joint",
+            "optimisation_inputs": "APS and events",
+            "metrics_on_observable_region": {
+              "psnr_db": 18.413140460848116,
+              "ssim": 0.7998869093768278,
+              "mae": 0.05178457871079445,
+              "rmse": 0.12004470080137253,
+              "correlation": 0.934147148594344,
+              "gradient_x_correlation": 0.4603721730584815,
+              "gradient_y_correlation": 0.4330709135852365,
+              "gradient_x_rmse": 0.10621961206197739,
+              "gradient_y_rmse": 0.09314050525426865
+            },
+            "aps_reprojection_rmse": 0.008063774555921555,
+            "event_residual_mae": 0.02819395810365677,
+            "event_residual_rmse": 0.05884447321295738,
+            "iterations": 1200
+          }
+        },
+        "joint_improvement_over_aps_only": {
+          "psnr_db": 2.216506976847409,
+          "ssim": 0.055061078137211505,
+          "correlation": 0.047505784008261,
+          "gradient_x_correlation": 0.0632416802519376,
+          "gradient_y_correlation": 0.18134480255486918
+        },
+        "quality_checks": {
+          "joint_psnr_exceeds_aps_only": true,
+          "joint_ssim_exceeds_aps_only": true,
+          "joint_x_gradient_correlation_exceeds_aps_only": true,
+          "joint_y_gradient_correlation_exceeds_aps_only": true
+        },
+        "elapsed_seconds": 22.03498125076294,
+        "truth_usage": "forward parity and evaluation only; never an optimisation input"
+      }
+    },
+    "sigma08": {
+      "simulation_validation": {
+        "all_passed": true,
+        "checks": {
+          "source": {
+            "passed": true,
+            "shape": [
+              400,
+              400
+            ],
+            "min": 0.05000000074505806,
+            "max": 1.0
+          },
+          "motion": {
+            "passed": true,
+            "sample_count": 501,
+            "final_shift_xy_um": [
+              4.5,
+              4.5
+            ]
+          },
+          "grin": {
+            "passed": true,
+            "shape": [
+              501,
+              320,
+              320
+            ],
+            "min": 0.15352454781532288,
+            "max": 0.9999999403953552
+          },
+          "fibre": {
+            "passed": true,
+            "shape": [
+              501,
+              320,
+              320
+            ],
+            "min": 0.0,
+            "max": 0.9999998211860657
+          },
+          "sensor": {
+            "passed": true,
+            "shape": [
+              501,
+              260,
+              346
+            ],
+            "min": 0.0,
+            "max": 0.9999998807907104
+          },
+          "aps": {
+            "passed": true,
+            "shape": [
+              260,
+              346
+            ],
+            "min": 0.0,
+            "max": 0.9999998807907104
+          },
+          "events": {
+            "passed": true,
+            "count": 102961,
+            "on_count": 46680,
+            "off_count": 56281
+          }
+        },
+        "derived_parameters": {
+          "source_shape_px": [
+            400,
+            400
+          ],
+          "source_field_size_um": [
+            200.0,
+            200.0
+          ],
+          "fibre_shape_px": [
+            320,
+            320
+          ],
+          "time_intervals": 500,
+          "time_samples": 501,
+          "relay_magnification": 30.0625,
+          "fibre_pitch_on_sensor_px": 7.3125,
+          "fibre_diameter_on_sensor_px": 4.7124999999999995
+        }
+      },
+      "event_stats": {
+        "count": 102961,
+        "on_count": 46680,
+        "off_count": 56281,
+        "first_timestamp_s": 0.0006000000284984708,
+        "last_timestamp_s": 0.05000000074505806,
+        "device_used": "cuda",
+        "coordinate_order": "t_s,x,y,polarity"
+      },
+      "reconstruction": {
+        "method": "scheme_A_core_aggregated_events",
+        "simulation_config": "/home/robbie/tyf_code/EventCode/myFEFibreSR/fibre_frame_event_sim/configs/phase2_xy_usaf_sigma08.yaml",
+        "data_root": "/home/robbie/tyf_code/EventCode/myFEFibreSR/fibre_frame_event_sim/outputs/phase2_xy_usaf_sigma08",
+        "device": "cuda",
+        "latent_shape": [
+          112,
+          112
+        ],
+        "event_time_stride": 5,
+        "event_weight": 0.03,
+        "tv_weight": 0.005,
+        "grin_sigma_um": 0.8,
+        "core_count": 1415,
+        "selected_pixels_per_core": 4,
+        "observable_crop_yx": [
+          32,
+          359,
+          35,
+          356
+        ],
+        "trajectory_range_xy_um": [
+          4.5,
+          4.5
+        ],
+        "trajectory_path_length_um": 9.0,
+        "forward_validation": {
+          "core_signal_mae": 0.0001772095129126683,
+          "core_signal_rmse": 0.00041535089258104563,
+          "core_signal_max_abs_error": 0.003976285457611084,
+          "core_signal_correlation": 0.9999989185985843,
+          "truth_event_residual_mae": 0.03684099763631821,
+          "truth_event_residual_rmse": 0.06611522287130356,
+          "truth_event_correlation": 0.9906570093772655,
+          "random_event_residual_mae": 0.20310078561306
+        },
+        "initial_metrics_on_observable_region": {
+          "psnr_db": 14.69311263640407,
+          "ssim": 0.5965334138132236,
+          "mae": 0.10620532929897308,
+          "rmse": 0.1842232197523117,
+          "correlation": 0.8411116657114193,
+          "gradient_x_correlation": 0.17447502266529843,
+          "gradient_y_correlation": 0.14659032966030203,
+          "gradient_x_rmse": 0.1180812418460846,
+          "gradient_y_rmse": 0.10233867913484573
+        },
+        "reconstructions": {
+          "aps_only": {
+            "mode": "aps_only",
+            "optimisation_inputs": "APS only",
+            "metrics_on_observable_region": {
+              "psnr_db": 16.393897831731614,
+              "ssim": 0.7495055308231001,
+              "mae": 0.06659308820962906,
+              "rmse": 0.15146249532699585,
+              "correlation": 0.8920567665545087,
+              "gradient_x_correlation": 0.39874875815694916,
+              "gradient_y_correlation": 0.27284599417621536,
+              "gradient_x_rmse": 0.10976891219615936,
+              "gradient_y_rmse": 0.09952829033136368
+            },
+            "aps_reprojection_rmse": 0.0047765979543328285,
+            "event_residual_mae": 0.05973506718873978,
+            "event_residual_rmse": 0.1329440027475357,
+            "iterations": 1200
+          },
+          "events_only": {
+            "mode": "events_only",
+            "optimisation_inputs": "events only",
+            "metrics_on_observable_region": {
+              "psnr_db": 4.60669312262476,
+              "ssim": 0.46960146169627076,
+              "mae": 0.5368110537528992,
+              "rmse": 0.5883901119232178,
+              "correlation": 0.8808206206023683,
+              "gradient_x_correlation": 0.4591920485081209,
+              "gradient_y_correlation": 0.4181895104060304,
+              "gradient_x_rmse": 0.1111096665263176,
+              "gradient_y_rmse": 0.09808118641376495
+            },
+            "aps_reprojection_rmse": 0.5665381550788879,
+            "event_residual_mae": 0.020113656297326088,
+            "event_residual_rmse": 0.035569243133068085,
+            "iterations": 1200
+          },
+          "joint": {
+            "mode": "joint",
+            "optimisation_inputs": "APS and events",
+            "metrics_on_observable_region": {
+              "psnr_db": 18.2397517248372,
+              "ssim": 0.7879157225748746,
+              "mae": 0.053972985595464706,
+              "rmse": 0.122465118765831,
+              "correlation": 0.9314829843402941,
+              "gradient_x_correlation": 0.45269353888346425,
+              "gradient_y_correlation": 0.40638691926088855,
+              "gradient_x_rmse": 0.1066708117723465,
+              "gradient_y_rmse": 0.0944286584854126
+            },
+            "aps_reprojection_rmse": 0.007784310728311539,
+            "event_residual_mae": 0.02632037363946438,
+            "event_residual_rmse": 0.04876839742064476,
+            "iterations": 1200
+          }
+        },
+        "joint_improvement_over_aps_only": {
+          "psnr_db": 1.8458538931055841,
+          "ssim": 0.038410191751774514,
+          "correlation": 0.03942621778578537,
+          "gradient_x_correlation": 0.053944780726515096,
+          "gradient_y_correlation": 0.1335409250846732
+        },
+        "quality_checks": {
+          "joint_psnr_exceeds_aps_only": true,
+          "joint_ssim_exceeds_aps_only": true,
+          "joint_x_gradient_correlation_exceeds_aps_only": true,
+          "joint_y_gradient_correlation_exceeds_aps_only": true
+        },
+        "elapsed_seconds": 35.2456910610199,
+        "truth_usage": "forward parity and evaluation only; never an optimisation input"
+      }
+    }
+  },
+  "comparison_to_horizontal_baseline": {
+    "common_crop_yx": [
+      41,
+      359,
+      35,
+      356
+    ],
+    "metrics": {
+      "horizontal_sigma0": {
+        "psnr_db": 17.1579726068057,
+        "ssim": 0.7667340862209806,
+        "mae": 0.059243734925985336,
+        "rmse": 0.1387079507112503,
+        "correlation": 0.9071071759362498,
+        "gradient_x_correlation": 0.4679770276375569,
+        "gradient_y_correlation": 0.2837478080813053,
+        "gradient_x_rmse": 0.10626900941133499,
+        "gradient_y_rmse": 0.10065406560897827
+      },
+      "sigma0": {
+        "psnr_db": 18.37714967542099,
+        "ssim": 0.7990653009486189,
+        "mae": 0.052022021263837814,
+        "rmse": 0.12054313719272614,
+        "correlation": 0.9312175166137171,
+        "gradient_x_correlation": 0.4590590610725586,
+        "gradient_y_correlation": 0.43421394913362577,
+        "gradient_x_rmse": 0.1068110466003418,
+        "gradient_y_rmse": 0.09439624845981598
+      },
+      "sigma08": {
+        "psnr_db": 18.18640001849706,
+        "ssim": 0.7864728156545266,
+        "mae": 0.05440071225166321,
+        "rmse": 0.12321965396404266,
+        "correlation": 0.928131580581135,
+        "gradient_x_correlation": 0.4507401030631862,
+        "gradient_y_correlation": 0.40763153934002566,
+        "gradient_x_rmse": 0.10729988664388657,
+        "gradient_y_rmse": 0.09570591151714325
+      }
+    },
+    "delta_from_horizontal": {
+      "sigma0": {
+        "psnr_db": 1.2191770686152914,
+        "ssim": 0.032331214727638335,
+        "correlation": 0.024110340677467312,
+        "gradient_x_correlation": -0.00891796656499827,
+        "gradient_y_correlation": 0.15046614105232048
+      },
+      "sigma08": {
+        "psnr_db": 1.0284274116913608,
+        "ssim": 0.019738729433546043,
+        "correlation": 0.021024404644885197,
+        "gradient_x_correlation": -0.017236924574370704,
+        "gradient_y_correlation": 0.12388373125872038
+      }
+    }
+  },
+  "all_directional_quality_checks_passed": true
+}

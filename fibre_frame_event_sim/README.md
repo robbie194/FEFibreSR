@@ -73,3 +73,32 @@ HDF5 事件文件同时保存：
 - `events_t_us_x_y_p01`：uint32，列为 `[t_us, x, y, p]`，`p ∈ {0,1}`。
 
 默认输出目录为 `outputs/phase1_usaf/`。每一步都能独立重跑，但需保证它依赖的前一步产物已存在。
+
+## 二维扫描与 GRIN sigma 对照
+
+第二阶段新增两套除 GRIN blur 外完全相同的配置：
+
+- `configs/phase2_xy_usaf_sigma0.yaml`：`sigma_um=0.0`；
+- `configs/phase2_xy_usaf_sigma08.yaml`：`sigma_um=0.8`。
+
+远端物体不再只沿一条直线运动，而是经过三个 waypoints：
+
+```text
+(0.0, 0.0) um
+  -> (4.5, 0.0) um    先水平扫描一个芯间距
+  -> (4.5, 4.5) um    再垂直扫描一个芯间距
+```
+
+每段持续 25 ms、速度为 180 um/s，总曝光 50 ms，包含 500 个时间区间和 501 个端点。两段轨迹非共线，因此 x、y 两个方向都获得独立亚芯距采样相位；这与仍然只有一个自由方向的对角直线不同。
+
+分别生成完整输入：
+
+```bash
+/home/robbie/miniconda3/envs/NeuroFibreSR/bin/python scripts/run_all.py \
+  --config configs/phase2_xy_usaf_sigma0.yaml
+
+/home/robbie/miniconda3/envs/NeuroFibreSR/bin/python scripts/run_all.py \
+  --config configs/phase2_xy_usaf_sigma08.yaml
+```
+
+输出位于 `outputs/phase2_xy_usaf_sigma0/` 和 `outputs/phase2_xy_usaf_sigma08/`。生成数据仍由仓库 `.gitignore` 排除，可通过上述命令无损重建。

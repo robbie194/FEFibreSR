@@ -1,0 +1,122 @@
+{
+  "method": "scheme_A_core_aggregated_events",
+  "simulation_config": "/home/robbie/tyf_code/EventCode/myFEFibreSR/fibre_frame_event_sim/configs/phase2_xy_usaf_sigma0.yaml",
+  "data_root": "/home/robbie/tyf_code/EventCode/myFEFibreSR/fibre_frame_event_sim/outputs/phase2_xy_usaf_sigma0",
+  "device": "cuda",
+  "latent_shape": [
+    112,
+    112
+  ],
+  "event_time_stride": 5,
+  "event_weight": 0.03,
+  "tv_weight": 0.005,
+  "grin_sigma_um": 0.0,
+  "core_count": 1415,
+  "selected_pixels_per_core": 4,
+  "observable_crop_yx": [
+    32,
+    359,
+    35,
+    356
+  ],
+  "trajectory_range_xy_um": [
+    4.5,
+    4.5
+  ],
+  "trajectory_path_length_um": 9.0,
+  "forward_validation": {
+    "core_signal_mae": 0.00019758443522732705,
+    "core_signal_rmse": 0.0005518436664715409,
+    "core_signal_max_abs_error": 0.005311071872711182,
+    "core_signal_correlation": 0.9999982446489436,
+    "truth_event_residual_mae": 0.03320668265223503,
+    "truth_event_residual_rmse": 0.06422506272792816,
+    "truth_event_correlation": 0.9935632215906873,
+    "random_event_residual_mae": 0.2504613697528839
+  },
+  "initial_metrics_on_observable_region": {
+    "psnr_db": 14.764635445958604,
+    "ssim": 0.6001440123785257,
+    "mae": 0.10338136553764343,
+    "rmse": 0.18271249532699585,
+    "correlation": 0.8430263960252768,
+    "gradient_x_correlation": 0.17689079676554487,
+    "gradient_y_correlation": 0.14632956033349925,
+    "gradient_x_rmse": 0.11812981218099594,
+    "gradient_y_rmse": 0.10245539247989655
+  },
+  "reconstructions": {
+    "aps_only": {
+      "mode": "aps_only",
+      "optimisation_inputs": "APS only",
+      "metrics_on_observable_region": {
+        "psnr_db": 16.196633484000706,
+        "ssim": 0.7448258312396163,
+        "mae": 0.06736627221107483,
+        "rmse": 0.15494170784950256,
+        "correlation": 0.886641364586083,
+        "gradient_x_correlation": 0.3971304928065439,
+        "gradient_y_correlation": 0.25172611103036735,
+        "gradient_x_rmse": 0.10981691628694534,
+        "gradient_y_rmse": 0.10036645829677582
+      },
+      "aps_reprojection_rmse": 0.004413144197314978,
+      "event_residual_mae": 0.07810048013925552,
+      "event_residual_rmse": 0.187722310423851,
+      "iterations": 1200
+    },
+    "events_only": {
+      "mode": "events_only",
+      "optimisation_inputs": "events only",
+      "metrics_on_observable_region": {
+        "psnr_db": 4.763492358678598,
+        "ssim": 0.4884138266874212,
+        "mae": 0.5272188186645508,
+        "rmse": 0.5778636336326599,
+        "correlation": 0.884983423216591,
+        "gradient_x_correlation": 0.4626197022138389,
+        "gradient_y_correlation": 0.4480297833597856,
+        "gradient_x_rmse": 0.11071383953094482,
+        "gradient_y_rmse": 0.0968499481678009
+      },
+      "aps_reprojection_rmse": 0.5575245022773743,
+      "event_residual_mae": 0.021905867382884026,
+      "event_residual_rmse": 0.04166187345981598,
+      "iterations": 1200
+    },
+    "joint": {
+      "mode": "joint",
+      "optimisation_inputs": "APS and events",
+      "metrics_on_observable_region": {
+        "psnr_db": 18.413140460848116,
+        "ssim": 0.7998869093768278,
+        "mae": 0.05178457871079445,
+        "rmse": 0.12004470080137253,
+        "correlation": 0.934147148594344,
+        "gradient_x_correlation": 0.4603721730584815,
+        "gradient_y_correlation": 0.4330709135852365,
+        "gradient_x_rmse": 0.10621961206197739,
+        "gradient_y_rmse": 0.09314050525426865
+      },
+      "aps_reprojection_rmse": 0.008063774555921555,
+      "event_residual_mae": 0.02819395810365677,
+      "event_residual_rmse": 0.05884447321295738,
+      "iterations": 1200
+    }
+  },
+  "joint_improvement_over_aps_only": {
+    "psnr_db": 2.216506976847409,
+    "ssim": 0.055061078137211505,
+    "correlation": 0.047505784008261,
+    "gradient_x_correlation": 0.0632416802519376,
+    "gradient_y_correlation": 0.18134480255486918
+  },
+  "quality_checks": {
+    "joint_psnr_exceeds_aps_only": true,
+    "joint_ssim_exceeds_aps_only": true,
+    "joint_x_gradient_correlation_exceeds_aps_only": true,
+    "joint_y_gradient_correlation_exceeds_aps_only": true
+  },
+  "elapsed_seconds": 22.03498125076294,
+  "truth_usage": "forward parity and evaluation only; never an optimisation input"
+}

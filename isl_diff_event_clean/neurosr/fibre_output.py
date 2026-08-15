@@ -12,12 +12,28 @@ from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 
 def image_metrics(reconstruction: np.ndarray, truth: np.ndarray) -> dict[str, float]:
     """Return full-reference metrics on equally shaped, linear images."""
+    gradient_x = np.diff(reconstruction, axis=1)
+    truth_gradient_x = np.diff(truth, axis=1)
+    gradient_y = np.diff(reconstruction, axis=0)
+    truth_gradient_y = np.diff(truth, axis=0)
     return {
         "psnr_db": float(peak_signal_noise_ratio(truth, reconstruction, data_range=1.0)),
         "ssim": float(structural_similarity(truth, reconstruction, data_range=1.0)),
         "mae": float(np.mean(np.abs(reconstruction - truth))),
         "rmse": float(np.sqrt(np.mean((reconstruction - truth) ** 2))),
         "correlation": float(np.corrcoef(reconstruction.ravel(), truth.ravel())[0, 1]),
+        "gradient_x_correlation": float(
+            np.corrcoef(gradient_x.ravel(), truth_gradient_x.ravel())[0, 1]
+        ),
+        "gradient_y_correlation": float(
+            np.corrcoef(gradient_y.ravel(), truth_gradient_y.ravel())[0, 1]
+        ),
+        "gradient_x_rmse": float(
+            np.sqrt(np.mean((gradient_x - truth_gradient_x) ** 2))
+        ),
+        "gradient_y_rmse": float(
+            np.sqrt(np.mean((gradient_y - truth_gradient_y) ** 2))
+        ),
     }
 
 

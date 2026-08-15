@@ -22,6 +22,7 @@ from neurosr.fibre_data import (
 )
 from neurosr.fibre_event_loss import predict_cumulative_event_change
 from neurosr.fibre_forward import FibreCoreForward
+from neurosr.fibre_output import image_metrics
 
 
 class CoreObservationTests(unittest.TestCase):
@@ -103,6 +104,30 @@ class FibreForwardTests(unittest.TestCase):
         gain = torch.tensor([[1.0, 0.8], [0.9, 0.7]])
         predicted = predict_cumulative_event_change(signal, gain, 255.0)
         torch.testing.assert_close(predicted, torch.zeros_like(predicted))
+
+
+class DirectionalMetricTests(unittest.TestCase):
+    def test_directional_metrics_identify_axis_specific_blur(self) -> None:
+        truth = np.zeros((32, 32), dtype=np.float32)
+        truth[8:24, 6:11] = 1.0
+        truth[13:18, 18:28] = 1.0
+        x_blurred = np.stack(
+            [np.convolve(row, np.ones(5) / 5, mode="same") for row in truth]
+        ).astype(np.float32)
+        y_blurred = np.stack(
+            [np.convolve(column, np.ones(5) / 5, mode="same") for column in truth.T],
+            axis=1,
+        ).astype(np.float32)
+        x_metrics = image_metrics(x_blurred, truth)
+        y_metrics = image_metrics(y_blurred, truth)
+        self.assertLess(
+            x_metrics["gradient_x_correlation"],
+            y_metrics["gradient_x_correlation"],
+        )
+        self.assertLess(
+            y_metrics["gradient_y_correlation"],
+            x_metrics["gradient_y_correlation"],
+        )
 
 
 if __name__ == "__main__":

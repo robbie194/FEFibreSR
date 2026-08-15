@@ -356,6 +356,32 @@ def run_fibre_reconstruction(
         summaries[mode] = summary
 
     save_comparison(output, truth, initial, results, crop)
+    improvements = {}
+    quality_checks = {}
+    if "aps_only" in summaries and "joint" in summaries:
+        aps_metrics = summaries["aps_only"]["metrics_on_observable_region"]
+        joint_metrics = summaries["joint"]["metrics_on_observable_region"]
+        tracked_metrics = (
+            "psnr_db",
+            "ssim",
+            "correlation",
+            "gradient_x_correlation",
+            "gradient_y_correlation",
+        )
+        improvements = {
+            name: joint_metrics[name] - aps_metrics[name] for name in tracked_metrics
+        }
+        quality_checks = {
+            "joint_psnr_exceeds_aps_only": improvements["psnr_db"] > 0,
+            "joint_ssim_exceeds_aps_only": improvements["ssim"] > 0,
+            "joint_x_gradient_correlation_exceeds_aps_only": (
+                improvements["gradient_x_correlation"] > 0
+            ),
+            "joint_y_gradient_correlation_exceeds_aps_only": (
+                improvements["gradient_y_correlation"] > 0
+            ),
+        }
+    shift_steps = np.diff(observations.shifts_xy_um, axis=0)
     overall = {
         "method": "scheme_A_core_aggregated_events",
         "simulation_config": str(config.simulation_config),
@@ -374,11 +400,19 @@ def run_fibre_reconstruction(
             crop[1].start,
             crop[1].stop,
         ],
+        "trajectory_range_xy_um": np.ptp(
+            observations.shifts_xy_um, axis=0
+        ).tolist(),
+        "trajectory_path_length_um": float(
+            np.linalg.norm(shift_steps, axis=1).sum()
+        ),
         "forward_validation": parity,
         "initial_metrics_on_observable_region": image_metrics(
             initial[crop], truth[crop]
         ),
         "reconstructions": summaries,
+        "joint_improvement_over_aps_only": improvements,
+        "quality_checks": quality_checks,
         "elapsed_seconds": time.time() - started,
         "truth_usage": "forward parity and evaluation only; never an optimisation input",
     }

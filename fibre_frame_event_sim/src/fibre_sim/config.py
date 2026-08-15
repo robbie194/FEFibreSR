@@ -4,6 +4,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import yaml
 
 
@@ -114,14 +115,17 @@ def validate_config(cfg: dict[str, Any]) -> None:
     if abs(intervals - round(intervals)) > 1e-9:
         raise ValueError("duration_s must be an integer multiple of dt_s")
 
+    from .motion import motion_from_config
+
     pixel_size = float(cfg["source"]["pixel_size_um"])
     source_h, source_w = map(int, cfg["source"]["output_shape_px"])
     source_h_um = source_h * pixel_size
     source_w_um = source_w * pixel_size
     fibre_size = float(cfg["grin"]["fibre_field_size_um"])
-    vx, vy = map(abs, map(float, cfg["motion"]["velocity_um_s"]))
-    required_h = fibre_size + 2 * vy * duration
-    required_w = fibre_size + 2 * vx * duration
+    _, shifts = motion_from_config(cfg["motion"])
+    max_abs_x, max_abs_y = np.max(np.abs(shifts), axis=0)
+    required_h = fibre_size + 2 * max_abs_y
+    required_w = fibre_size + 2 * max_abs_x
     if source_h_um + 1e-9 < required_h or source_w_um + 1e-9 < required_w:
         raise ValueError(
             "source physical field is too small for fibre field plus motion margin"
@@ -140,4 +144,3 @@ def validate_config(cfg: dict[str, Any]) -> None:
         cfg["fibre"]["core_pitch_um"]
     ):
         raise ValueError("core diameter must be smaller than core pitch")
-

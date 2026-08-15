@@ -80,3 +80,28 @@ data contract, forward model, loss, verification evidence, and limitations.
 - `neurosr/fibre_event_loss.py`: v2e-compatible event response and regularisers.
 - `neurosr/fibre_pipeline.py`: fibre-aware validation, optimisation, and baselines.
 - `neurosr/fibre_output.py`: reconstruction metrics and diagnostic figures.
+
+## Two-dimensional sigma sweep
+
+The complete second experiment generates a non-collinear x/y scan, simulates
+both `grin.sigma_um=0` and `0.8`, reconstructs all three baselines, and fails if
+the joint result does not improve both directional gradient checks:
+
+```bash
+cd isl_diff_event_clean
+MPLBACKEND=Agg /home/robbie/miniconda3/envs/NeuroFibreSR/bin/python \
+  FibreNeuroSR_xy_sweep.py
+```
+
+Reuse already generated simulation and reconstruction arrays while rebuilding
+the common reports and figures:
+
+```bash
+/home/robbie/miniconda3/envs/NeuroFibreSR/bin/python \
+  FibreNeuroSR_xy_sweep.py --skip-simulation --skip-reconstruction
+```
+
+The cross-case results are in
+`results/fibre_neurosr/phase2_xy_sigma_sweep`. See
+[`TWO_DIMENSIONAL_RECONSTRUCTION_REPORT.md`](TWO_DIMENSIONAL_RECONSTRUCTION_REPORT.md)
+for the trajectory, sigma-aware forward model, metrics, and interpretation.
