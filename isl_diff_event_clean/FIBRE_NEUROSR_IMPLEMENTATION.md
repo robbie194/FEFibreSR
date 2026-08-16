@@ -35,6 +35,95 @@
 
 真实实验没有真值时，可以直接去掉这两项评价，重建本身仍只依赖 APS、events、轨迹和标定。
 
+### 【进一步分析 2026-08-16：问题 1】motion.npz 到底是什么，真实实验怎样获得运动
+
+#### 1. 这个文件只有轨迹，不包含图像
+
+`motion.npz` 当前只保存两个数组：
+
+```text
+timestamps_s   shape=[T]     每个运动采样时刻，单位 s
+shifts_xy_um   shape=[T, 2]  对应时刻的远端物体 (x, y) 位移，单位 um
+```
+
+phase 1 文件的实际内容是：
+
+```text
+T = 251
+t: 0 -> 0.025 s，间隔 0.0001 s
+shift: (0, 0) -> (4.5, 0) um
+```
+
+它不是 frame、事件图或物体纹理，只是一个带时间戳的二维位移表。仿真中轨迹由配置直接生成，所以重建读取的是无误差真值轨迹。
+
+还要区分三种坐标：
+
+- `shifts_xy_um`：远端物体相对固定光纤端面的位移；
+- `core_centres_xy_um`：远端纤芯中心在光纤端面的固定位置；
+- DAVIS event `(x,y)`：近端芯斑落在 sensor 上的 pixel 坐标。
+
+当前模型真正采样的远端物体位置近似围绕：
+
+$$
+\mathbf q_i(t)
+=
+\frac{\mathbf r_i}{M}-\mathbf s(t),
+$$
+
+其中 $\mathbf r_i$ 是第 $i$ 根纤芯中心，$M$ 是 GRIN magnification，$\mathbf s(t)$ 是 `shifts_xy_um`。严格模型不是在 $\mathbf q_i(t)$ 取一个点，而是在该位置附近按 GRIN PSF 和圆形芯孔径做积分。
+
+#### 2. 真实实验中的运动是否一定不知道
+
+不一定。如果远端 target 安装在压电台、voice-coil 或精密二维位移台上，至少有三层运动信息：
+
+1. 控制器的命令轨迹；
+2. stage encoder 的实测轨迹；
+3. 光学系统中目标真正相对纤芯端面的轨迹。
+
+三者不会完全相同。命令轨迹可以作为初始化，encoder 通常比命令值可靠，但最终仍要标定 actuator scale、坐标轴旋转、零点、延迟和 APS/event 时间同步。论文中的 `known motion` 应指经过这些标定后可用的轨迹，而不是简单把控制命令当作绝对真值。
+
+对第一版真实实验，推荐主动施加已知微扫描并读取 encoder。这样可以先验证事件是否真的提升空间分辨率，不要同时把“未知图像”和“完全未知运动”两个困难叠加在一起。
+
+#### 3. 能否只根据 APS 和事件自己估计轨迹
+
+可以，但**可行不等于容易**，而且当前 `FibreNeuroSR_demo.py` 尚未实现这一步。当前 fibre pipeline 直接读取 `motion.npz`，优化变量只有 latent image；它不会更新 `shifts_xy_um`。
+
+普通场景版 `NeuroSRM_demo.py` 已有事件运动估计：先把事件切成多个 event frames，通过相位相关得到分段位移初值，再用 warped-event contrast 优化连续轨迹。但是该方法不能原样套到 fibre 数据上，原因是：
+
+> 普通相机中，物体移动时事件的 sensor 坐标随图像移动；当前 fibre 模型中，近端芯斑位置固定，变化的是每根固定芯斑的亮度。
+
+因此不能直接观察 DAVIS 平面上的整幅纹理平移。更适合 fibre 的估计路线是：
+
+1. 先将 DAVIS events 标定并聚合到 core lattice；
+2. 把每芯累计事件放在对应的远端 core centre，构造稀疏 core-event frames；
+3. 用相位相关或 core-domain contrast maximization 得到粗轨迹；
+4. 将轨迹参数化为常速度、分段线性或 B-spline 控制点；
+5. 在同一个可微前向中联合优化物体 $O$ 与轨迹 $\mathbf s(t)$；
+6. 固定 $\mathbf s(0)=(0,0)$，并加入速度、加速度和路径幅度正则，消除坐标零点与不合理抖动。
+
+联合目标可写成：
+
+$$
+\min_{O,\,\mathbf s}
+\mathcal L_{APS}(O,\mathbf s)
++\lambda_e\mathcal L_{event}(O,\mathbf s)
++\lambda_O R_O(O)
++\lambda_s R_s(\mathbf s).
+$$
+
+这个问题是非凸的，并存在图像与运动互相解释的耦合：错误边缘可能被错误轨迹补偿，低纹理目标也很难提供运动信息。因此需要较好的 stage/encoder 初值、多尺度优化、低维轨迹模型和留出时间点验证。
+
+实际难度可以概括为：
+
+| 条件 | 运动估计难度 |
+|---|---|
+| 已知恒速方向，只估计速度大小和时间偏移 | 较容易 |
+| 已知轨迹形状，只估计 scale、rotation、delay | 可控，建议先做 |
+| 分段平滑二维轨迹，有 encoder 初值 | 中等 |
+| 完全未知二维轨迹，只靠单次 APS + core events | 较难，容易与图像耦合 |
+
+所以答案是：轨迹可以自己估计，但真实系统的第一阶段最好采用“encoder/命令初始化 + 数据小范围修正”，而不是一开始完全盲估计。
+
 ## 3. 数据怎样从 DAVIS pixels 变成纤芯通道
 
 当前 simulator 中，每根纤芯只有一个随时间变化的标量强度。近端一个芯斑覆盖的多个 DAVIS pixels 是冗余读出，不是多个远端亚像素。
@@ -51,6 +140,151 @@
 - 相关系数：几乎为 `1.0`。
 
 这说明从 sensor APS 回到 core domain 的过程在当前仿真中是准确的。
+
+### 【进一步分析 2026-08-16：问题 2】为什么不是把芯内事件全部放到芯中心再 warp
+
+#### 1. 从远端纤芯到近端 DAVIS pixel 的当前假设
+
+当前 simulator 对每根纤芯只保留一个物理自由度 $c_i(t)$：第 $i$ 根纤芯在时刻 $t$ 的总通光量。relay 后，同一芯斑内第 $r$ 个 DAVIS pixel 的强度近似为：
+
+$$
+I_{i,r}(t)
+=
+g_{i,r}\,c_i(t),
+$$
+
+其中 $g_{i,r}$ 是由芯斑形状、relay 和 sensor pixel integration 决定的固定 gain。当前仿真没有 background；真实实验还应增加 offset、dark current 和噪声项。
+
+因此同一芯内多个 pixels 并不是多个远端位置，它们只是同一个 $c_i(t)$ 的多路、不同 gain 的读出。把它们当作独立远端亚像素会重复计算同一物理信息。
+
+#### 2. 标定阶段具体做了什么
+
+`build_core_calibration()` 使用均匀光照：如果所有 core signals 都为 1，那么 sensor 上每个 pixel 的响应就是其 gain。随后对每根纤芯：
+
+1. 根据 relay magnification 把远端 core centre 投影到 DAVIS；
+2. 在对应固定芯斑区域内搜索候选 pixels；
+3. 优先选择响应高、靠近 spot 且未被其他芯占用的 4 个 pixels；
+4. 保存 `pixel_xy[core, readout]` 和 `gain[core, readout]`。
+
+“4 个”是当前的工程设置，不是物理常数。它在仿真中用于取得冗余又避免芯间混叠；真实数据中应该根据 SNR、spot overlap、dead pixels 和标定稳定性选择，或者使用带权 soft assignment。
+
+若成像光纤束保持近远端纤芯空间排列，可以通过芯斑检测加全局几何变换建立 core identity；若近远端排列不能直接对应，则需要在远端逐芯扫描或测量 transmission matrix，不能只靠一张近端 flat-field 猜出远端身份。
+
+#### 3. APS 怎样变成一个 core 数值
+
+对选择出的 4 个 readouts，代码先除去各自 gain：
+
+$$
+\hat c_{i,r}^{APS}
+=
+\frac{I_{i,r}^{APS}}{g_{i,r}},
+$$
+
+再取中位数：
+
+$$
+\hat c_i^{APS}
+=
+\operatorname{median}_r
+\left(\hat c_{i,r}^{APS}\right).
+$$
+
+所以最终 APS observation 是 `[core]`，当前为 1415 个值，不是 DAVIS 的 `260 x 346` 图像。
+
+#### 4. Events 怎样变成 core 时间通道
+
+原始 event 为：
+
+```text
+(timestamp, sensor_x, sensor_y, polarity)
+```
+
+代码先建立两个 sensor lookup tables：
+
+```text
+sensor (x,y) -> core index
+sensor (x,y) -> readout index
+```
+
+原始 `(x,y)` 在这里的作用只是回答“这个 event 属于哪根芯、哪一路读出”。完成 lookup 后，近端 pixel 坐标不再进入空间重建。
+
+还要特别说明：当前实现并没有使用芯斑覆盖的全部 DAVIS pixels，只使用标定选出的每芯 4 个 readouts；落在其他 pixels 上的事件不会进入当前 event loss。这是避免 spot overlap 和错误归属的保守方案，不代表真实实验也必须丢弃其他 pixels。真实标定足够可靠时，可以对完整 spot mask 使用 gain/threshold 加权估计每芯信号。
+
+每个事件按 polarity 转成阈值增量：
+
+$$
+\delta e
+=
+\begin{cases}
++C_+, & p=+1,\\
+-C_-, & p=-1,
+\end{cases}
+$$
+
+再按 `[time, core, readout]` 累加，得到：
+
+$$
+E_{i,r}(t)
+=
+C_+N_{i,r}^{+}(t)
+-C_-N_{i,r}^{-}(t).
+$$
+
+前向模型则预测：
+
+$$
+\hat E_{i,r}(t)
+=
+L\!\left(g_{i,r}c_i(t)I_{white}\right)
+-L\!\left(g_{i,r}c_i(0)I_{white}\right),
+$$
+
+其中 $L$ 是与 v2e 相同的 lin-log response。当前 loss 在 readout 维先取平均，再比较预测与观测：
+
+$$
+\mathcal L_{event}
+=
+\operatorname{Huber}
+\left(
+\frac{1}{R}\sum_r\hat E_{i,r}(t),
+\frac{1}{R}\sum_r E_{i,r}(t)
+\right).
+$$
+
+因此同一根芯的 4 路 event readouts 用于降低阈值量化和单 pixel 读出误差，但不会产生 4 个远端空间采样。
+
+#### 5. “全部放在芯中心再 warp”与当前方法的关系
+
+把一根芯内所有事件的 sensor `(x,y)` 替换为对应 core centre，从概念上确实是在做 pixel-to-core collapse。它可以用来构造 core-domain event image，并可能作为未知运动的粗估计工具。
+
+但当前最终重建没有显式构造 IWE，也不逐事件 warp，原因有三点：
+
+1. 一根芯测到的是有限圆孔径内的总通光量，不是芯中心处的点值；
+2. 多个 DAVIS pixels 是同一芯信号的冗余阈值读出，把它们全部堆到中心会让一个芯因覆盖 pixels 较多而被不合理地重复加权；
+3. photometric event loss 能保留 ON/OFF 阈值、gain 和累计变化的物理量，而仅对中心事件做 contrast warp 会丢掉这些标定信息。
+
+当前方法等价于让每个固定 core aperture 随远端物体运动去扫描不同物体位置。第 $i$ 根芯的物理信号是：
+
+$$
+c_i(t)
+=
+\int
+A_i(\mathbf u-\mathbf r_i)
+\,[h_{GRIN}*O](\mathbf u-\mathbf s(t))
+\,d\mathbf u.
+$$
+
+空间信息来自 $\mathbf s(t)$ 改变后同一 aperture 覆盖了不同远端位置，而不是来自近端芯斑内部 event 的细微 `(x,y)` 差异。
+
+#### 6. 真实实验必须重新验证这一假设
+
+如果真实光纤中芯内模式分布会随远端入射位置、弯曲、波长或相干 speckle 改变，那么 $I_{i,r}(t)=g_{i,r}c_i(t)$ 的固定 gain 假设会失效。此时不能简单平均全部芯内 pixels，需要改成：
+
+- 多模式响应基；
+- 随状态变化的 per-core sensor footprint；
+- 或直接使用标定得到的线性/非线性 transmission operator。
+
+所以当前处理不是宣称“真实芯斑内部永远没有信息”，而是在方案 A 的标量 per-core 假设下，避免把未经验证的近端模式位置错误解释成远端亚像素。
 
 ## 4. 可微前向模型
 
@@ -75,6 +309,228 @@ Torch 前向与原 OpenCV simulator 的一致性为：
 | core signal 相关系数 | `0.999998` |
 
 少量误差来自 OpenCV 插值查表与 PyTorch 双线性插值的实现差别，不改变前向物理含义。
+
+### 【进一步分析 2026-08-16：问题 3】112 的依据、1.79 um 的计算与完整可微过程
+
+#### 1. 112 是怎样来的
+
+先明确结论：`112` 不是作者论文给出的数值，也不是由 core pitch、Nyquist 定理或某个光学公式唯一推导出的结果。它是当前方案 A 实现中手动选择的 reconstruction hyperparameter：
+
+```python
+latent_shape = (112, 112)
+```
+
+它的作用是限制未知图像的自由度，从而在分辨率、稳定性和计算量之间折中。
+
+当前不同尺度为：
+
+| 项目 | 数值 |
+|---|---:|
+| simulator source | `400 x 400` pixels |
+| source pixel size | `0.5 um` |
+| 名义物方视场 | `200 x 200 um` |
+| latent image | `112 x 112` unknowns |
+| latent unknown 数量 | 12,544 |
+| 若直接优化 400 x 400 | 160,000 unknowns |
+| core 数量 | 1,415 |
+
+`112 x 112` 只保留了 `400 x 400` 参数量的 `7.84%`。这样可以减少稀疏纤芯采样产生的巨大零空间，降低蜂窝伪影和噪声拟合，也减少优化难度。
+
+它还给出以下直观采样密度：
+
+$$
+\frac{4.5}{1.786}
+\approx2.52
+$$
+
+即一个 `4.5 um` core pitch 约含 2.52 个 latent samples；一个 `2.9 um` core diameter 约含：
+
+$$
+\frac{2.9}{1.786}
+\approx1.62
+$$
+
+个 latent samples。它比原始 core lattice 密，允许表达亚芯距结构，但 latent grid 较密本身不等于物理上已经恢复了这些结构；真正可恢复的频率仍由 aperture、轨迹、事件、噪声和正则共同决定。
+
+#### 2. 1.79 um 具体怎样计算
+
+采用名义视场计算：
+
+$$
+W
+=
+400\ \mathrm{pixels}
+\times0.5\ \mathrm{um/pixel}
+=
+200\ \mathrm{um}.
+$$
+
+因此每个 latent cell 的名义宽度为：
+
+$$
+\Delta_{latent}
+=
+\frac{200}{112}
+\approx1.7857\ \mathrm{um}.
+$$
+
+这就是文中的约 `1.79 um`。
+
+若严格按 `align_corners=True` 的像素中心距离计算，400 个 source pixel 的首尾中心距离是：
+
+$$
+(400-1)\times0.5
+=
+199.5\ \mathrm{um},
+$$
+
+112 个 latent pixel 有 111 个中心间隔，因此是：
+
+$$
+\frac{199.5}{112-1}
+\approx1.7973\ \mathrm{um}.
+$$
+
+`1.7857` 与 `1.7973` 的区别只来自“按 pixel cell 宽度”还是“按首尾 pixel centre”计数。文中的 `1.79 um` 是尺度说明，不应被解释成经过实验标定的实际分辨率。
+
+#### 3. 112 是否是最佳选择
+
+目前没有证据证明它最佳。它是跑通方案 A 时选择的经验折中，下一步应做 latent-size ablation，例如：
+
+```text
+64, 80, 96, 112, 128, 160, 200
+```
+
+**【新增数值结果 2026-08-16】** 为了先分离“网格表达能力”和“光纤反演难度”，使用不同 latent size 直接拟合同一个 GT observable crop，不经过 GRIN、纤芯、APS 或事件模型。2500 次 Adam 后的 representational oracle 为：
+
+| latent size | 名义间隔 | unknowns | oracle PSNR | oracle SSIM | oracle correlation |
+|---:|---:|---:|---:|---:|---:|
+| 64 | 3.125 um | 4,096 | 16.60 dB | 0.694 | 0.894 |
+| 80 | 2.500 um | 6,400 | 17.52 dB | 0.747 | 0.915 |
+| 96 | 2.083 um | 9,216 | 18.60 dB | 0.790 | 0.935 |
+| **112** | **1.786 um** | **12,544** | **19.59 dB** | **0.833** | **0.948** |
+| 128 | 1.563 um | 16,384 | 20.52 dB | 0.857 | 0.959 |
+| 160 | 1.250 um | 25,600 | 22.02 dB | 0.901 | 0.971 |
+| 200 | 1.000 um | 40,000 | 23.96 dB | 0.934 | 0.981 |
+
+这张表证明更大网格确实能表达更多 GT 细节，也证明 `112` 不是表示能力的上限最优点。但它**不能**推出正式重建应该直接改成 200：该 oracle 把 GT 直接交给优化器，没有观测欠定、事件量化、噪声和模型失配。网格越大，在真实逆问题中越可能利用零空间拟合噪声。因此还必须做下面的完整 reconstruction ablation。
+
+需要同时比较：
+
+- object GT、同参数化 oracle 和光学带限指标；
+- APS/event 留出时间点重投影；
+- x/y MTF 或 USAF line-pair contrast；
+- 对噪声和运动误差的稳定性；
+- 运行时间和显存。
+
+在仿真中可以用 GT 分析表示能力，但真实实验选择 latent size 时不能只追求训练观测残差最低，否则更大的网格很容易拟合噪声。应通过留出观测、重复实验和稳定性共同选择。
+
+#### 4. 可微前向从 latent image 到 core signals 怎样计算
+
+记待优化的 latent image 为：
+
+$$
+Z\in[0,1]^{112\times112}.
+$$
+
+**步骤 A：展开到 simulator source grid**
+
+代码用 bilinear interpolation 得到：
+
+$$
+O
+=
+\operatorname{BilinearUpsample}(Z)
+\in[0,1]^{400\times400}.
+$$
+
+这一步只是可微表示映射，不会凭空增加独立自由度。输出虽然是 `400 x 400`，独立未知量仍只有 12,544 个。
+
+**步骤 B：按远端位移采样到 fibre input grid**
+
+fibre input grid 为 `320 x 320`、`0.5 um/pixel`。对每个时刻 $t$ 和 fibre grid 物理坐标 $(x_f,y_f)$，对应 source pixel 坐标为：
+
+$$
+x_s
+=
+\frac{W_s-1}{2}
++\frac{x_f/M-s_x(t)}{p_s},
+$$
+
+$$
+y_s
+=
+\frac{H_s-1}{2}
++\frac{y_f/M-s_y(t)}{p_s},
+$$
+
+其中 $p_s=0.5\ \mathrm{um/pixel}$。PyTorch `grid_sample` 在 $O$ 上做双线性采样，得到每个时刻的 fibre input image。
+
+**步骤 C：GRIN PSF**
+
+如果 `grin.sigma_um > 0`，先把物理 sigma 换算成 fibre-grid pixels：
+
+$$
+\sigma_{px}
+=
+\frac{\sigma_{um}}{0.5\ \mathrm{um/pixel}},
+$$
+
+然后用归一化 Gaussian kernel 卷积。`sigma=0` 时跳过该卷积。
+
+**步骤 D：圆形芯孔径积分**
+
+代码按照 `2.9 um` 直径和 supersampling 构造 fractional pixel coverage kernel，归一化后卷积。这相当于计算每个可能芯位置附近的 aperture average，而不是读取一个中心 pixel。
+
+**步骤 E：在固定 core centres 取值**
+
+使用第二次 `grid_sample` 在 1415 个 `core_centres_xy_um` 上取 aperture average，并乘 GRIN 与 fibre transmission，得到：
+
+$$
+C(O,\mathbf s)
+\in\mathbb R^{T\times1415}.
+$$
+
+这就是 `core_signals[time, core]`。
+
+**步骤 F：生成 APS 与 event prediction**
+
+APS prediction 对时间做梯形积分：
+
+$$
+\hat A_i
+=
+\frac{1}{T_e}
+\int_0^{T_e} C_i(t)\,dt.
+$$
+
+Event prediction 则先乘每个 selected DAVIS readout 的 gain 和 `input_white_dn`，经过 lin-log response，再减去初始响应，得到每芯每路累计变化。
+
+**步骤 G：反向传播**
+
+上述 bilinear sampling、Gaussian convolution、aperture convolution、core sampling、时间积分和 lin-log response 都由 PyTorch tensor 运算构成。损失对 $C$ 的梯度可以逐层传播回 $O$，再传播回 $Z$：
+
+```text
+APS/event/TV loss
+  <- predicted APS and events
+  <- core signals
+  <- core sampling and aperture integration
+  <- GRIN blur and motion sampling
+  <- 400 x 400 expanded object
+  <- 112 x 112 latent parameters
+```
+
+Adam 更新的实际对象是 `112 x 112` 的 $Z$；每次更新后将其限制在 `[0,1]`。运动轨迹在当前 fibre pipeline 中只是前向输入，尚未参与梯度更新。
+
+#### 5. 为什么这仍然可以称为超分辨，而不是普通插值
+
+普通插值只把每芯一个 APS 平均值填进空隙，不要求插值图重新解释时间事件。当前方法要求同一 latent object 在已知亚芯距运动下，同时生成正确的：
+
+- 1415 个芯的曝光平均；
+- 每根芯随时间的 lin-log 变化；
+- 芯孔径积分和 GRIN blur。
+
+所以新增信息来自运动产生的多个采样相位和事件时间约束，而不是来自把 `112 x 112` 放大到 `400 x 400` 这个操作。`112` 只是允许算法表达这些信息的参数网格，不是超分辨证据本身。
 
 ## 5. 损失为什么这样写
 
@@ -139,3 +595,20 @@ results/fibre_neurosr/phase1_usaf/
 - 芯间串扰和背景。
 
 若要真正提高二维各向同性分辨率，下一组仿真应加入非共线二维轨迹，例如水平加垂直或小圆轨迹。只增加水平采样时间，不能补足垂直方向缺失的采样相位。
+
+### 【进一步结果 2026-08-16：二维仿真已经完成】
+
+上述非共线运动建议已经在 phase 2 中实现为：
+
+```text
+(0, 0) -> (4.5, 0) -> (4.5, 4.5) um
+```
+
+`sigma=0` 和 `sigma=0.8 um` 两套仿真、APS-only、events-only 和联合重建均已完成。相对各自 APS-only，联合结果的 PSNR、SSIM、x 梯度相关性和 y 梯度相关性全部提高。完整结果见：
+
+```text
+TWO_DIMENSIONAL_RECONSTRUCTION_REPORT.md
+PHASE2_RECONSTRUCTION_QUESTIONS_AND_SIMULATION_ROADMAP.md
+```
+
+不过 phase 2 仍然读取仿真真值轨迹，没有实现 fibre-domain 自主运动估计。因此本次问题 1 所讨论的“encoder 初始化 + core-domain 轨迹修正”仍然是迁移真实实验前需要补齐的关键模块。
