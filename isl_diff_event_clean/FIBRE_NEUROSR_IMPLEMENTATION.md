@@ -143,9 +143,63 @@ $$
 
 ### 【进一步分析 2026-08-16：问题 2】为什么不是把芯内事件全部放到芯中心再 warp
 
-#### 1. 从远端纤芯到近端 DAVIS pixel 的当前假设
+#### 1. 先给最简单的结论
 
-当前 simulator 对每根纤芯只保留一个物理自由度 $c_i(t)$：第 $i$ 根纤芯在时刻 $t$ 的总通光量。relay 后，同一芯斑内第 $r$ 个 DAVIS pixel 的强度近似为：
+你说的“把一根芯内的 event 都当成该芯中心，然后按运动 warp”是一个**可以做的 core-domain event image 方法**。它适合拿来做可视化，或者给未知运动提供粗初值。
+
+但是，当前 `FibreNeuroSR_demo.py` 的正式重建**没有**这样做。它不构造 event image、不逐 event warp；它把每根纤芯当作一个随时间变化的亮度通道，然后让一个物理前向模型去预测这 1415 路亮度如何随远端运动变化。
+
+最重要的区别是：
+
+```text
+普通 event warp：移动的是每个 event 的图像坐标
+当前 fibre 重建：固定的是近端芯斑坐标；移动的是远端物体，
+                  因而同一根固定纤芯看到的总亮度随时间变化
+```
+
+所以，`warp` 在普通场景版 `NeuroSRM_demo.py` 里是核心步骤；在当前 fibre 版中，运动通过可微前向的“移动远端取样坐标”进入，而不是通过修改每个 DAVIS event 的 `(x,y)` 进入。
+
+#### 2. 整个过程分成三段：构造数据、归属事件、正式重建
+
+| 阶段 | 发生在什么代码 | 输入和输出 | 是否把 event 放到芯中心 / warp |
+|---|---|---|---|
+| 生成模拟数据 | `fibre_frame_event_sim/src/fibre_sim/pipeline.py` 的 `generate_fibre_step()`、`generate_sensor_step()`、`generate_events_step()` | 远端物体 -> fibre frames -> DAVIS frames -> 原始 events | **否**。event 保留真实 DAVIS `(x,y)` |
+| 把 DAVIS 数据归属到纤芯 | `isl_diff_event_clean/neurosr/fibre_data.py` 的 `build_core_calibration()`、`extract_core_aps()`、`aggregate_cumulative_events()` | APS/events -> 每芯 APS 与每芯事件时间序列 | **不 warp**。只用 `(x,y)` 查“属于哪根芯” |
+| 正式反演 | `isl_diff_event_clean/neurosr/fibre_pipeline.py` 的 `_optimise()`，以及 `neurosr/fibre_forward.py` 的 `FibreCoreForward.forward()` | latent image + 已知位移 -> 预测 core APS/core events | **不 warp 原始 event**。模型移动远端物体的取样位置 |
+
+下面按这三段解释。阅读这一节时可以先记住：**只有第二段读取原始 event `(x,y)`；进入第三段后，原始 `(x,y)` 已经不再使用。**
+
+#### 3. 第一段：模拟数据怎样产生，为什么 event 最初不在芯中心
+
+模拟阶段先在远端生成物体，再经过纤芯和 relay：
+
+```text
+远端物体 O 与运动 s(t)
+  -> 每根纤芯的总通光量 c_i(t)
+  -> 近端 fibre spot 图像
+  -> DAVIS irradiance frame
+  -> v2e 生成原始 events: (t, sensor_x, sensor_y, polarity)
+```
+
+对应函数关系是：
+
+```text
+generate_fibre_step()
+  -> simulate_fibre_sequence()
+  -> 每一时刻每根芯的标量 core_signals[t, i] = c_i(t)
+
+generate_sensor_step()
+  -> relay_to_sensor_sequence()
+  -> 把固定的近端芯斑成像到 DAVIS pixels
+
+generate_events_step()
+  -> generate_v2e_events()
+  -> 对 DAVIS frame 序列产生原始 event 坐标
+```
+
+这里没有任何一步把 event 坐标改成 core centre。原因很简单：v2e 面对的是 sensor image，它自然输出的是 sensor pixel 坐标。
+
+当前 simulator 的关键假设是：一根纤芯只传输一个标量 $c_i(t)$。同一近端芯斑内第 $r$ 个 DAVIS pixel 只是这个标量的不同固定读出：
 
 $$
 I_{i,r}(t)
@@ -153,117 +207,158 @@ I_{i,r}(t)
 g_{i,r}\,c_i(t),
 $$
 
-其中 $g_{i,r}$ 是由芯斑形状、relay 和 sensor pixel integration 决定的固定 gain。当前仿真没有 background；真实实验还应增加 offset、dark current 和噪声项。
+其中 $g_{i,r}$ 是该 pixel 的固定 gain。因此一个芯斑内的多个 DAVIS pixels 不是多个远端空间位置。
 
-因此同一芯内多个 pixels 并不是多个远端位置，它们只是同一个 $c_i(t)$ 的多路、不同 gain 的读出。把它们当作独立远端亚像素会重复计算同一物理信息。
+#### 4. 第二段：重建读原始 event 时，到底做了什么
 
-#### 2. 标定阶段具体做了什么
-
-`build_core_calibration()` 使用均匀光照：如果所有 core signals 都为 1，那么 sensor 上每个 pixel 的响应就是其 gain。随后对每根纤芯：
-
-1. 根据 relay magnification 把远端 core centre 投影到 DAVIS；
-2. 在对应固定芯斑区域内搜索候选 pixels；
-3. 优先选择响应高、靠近 spot 且未被其他芯占用的 4 个 pixels；
-4. 保存 `pixel_xy[core, readout]` 和 `gain[core, readout]`。
-
-“4 个”是当前的工程设置，不是物理常数。它在仿真中用于取得冗余又避免芯间混叠；真实数据中应该根据 SNR、spot overlap、dead pixels 和标定稳定性选择，或者使用带权 soft assignment。
-
-若成像光纤束保持近远端纤芯空间排列，可以通过芯斑检测加全局几何变换建立 core identity；若近远端排列不能直接对应，则需要在远端逐芯扫描或测量 transmission matrix，不能只靠一张近端 flat-field 猜出远端身份。
-
-#### 3. APS 怎样变成一个 core 数值
-
-对选择出的 4 个 readouts，代码先除去各自 gain：
-
-$$
-\hat c_{i,r}^{APS}
-=
-\frac{I_{i,r}^{APS}}{g_{i,r}},
-$$
-
-再取中位数：
-
-$$
-\hat c_i^{APS}
-=
-\operatorname{median}_r
-\left(\hat c_{i,r}^{APS}\right).
-$$
-
-所以最终 APS observation 是 `[core]`，当前为 1415 个值，不是 DAVIS 的 `260 x 346` 图像。
-
-#### 4. Events 怎样变成 core 时间通道
-
-原始 event 为：
+这是从 DAVIS pixels 变成 core channels 的地方，全部在：
 
 ```text
-(timestamp, sensor_x, sensor_y, polarity)
+isl_diff_event_clean/neurosr/fibre_data.py
 ```
 
-代码先建立两个 sensor lookup tables：
+**步骤 4.1：先做 core-to-pixel 标定**
+
+函数 `build_core_calibration()` 用均匀纤芯输入生成一张 flat-field，并为每根纤芯选择 4 个可靠 DAVIS pixels。它保存：
 
 ```text
-sensor (x,y) -> core index
-sensor (x,y) -> readout index
+pixel_xy[core, readout]  # 这根芯选中了哪 4 个 sensor pixels
+gain[core, readout]      # 每个 selected pixel 的固定 gain
 ```
 
-原始 `(x,y)` 在这里的作用只是回答“这个 event 属于哪根芯、哪一路读出”。完成 lookup 后，近端 pixel 坐标不再进入空间重建。
+例如，假设第 17 根芯选中了四个 sensor pixels：
 
-还要特别说明：当前实现并没有使用芯斑覆盖的全部 DAVIS pixels，只使用标定选出的每芯 4 个 readouts；落在其他 pixels 上的事件不会进入当前 event loss。这是避免 spot overlap 和错误归属的保守方案，不代表真实实验也必须丢弃其他 pixels。真实标定足够可靠时，可以对完整 spot mask 使用 gain/threshold 加权估计每芯信号。
+```text
+core 17 -> (100, 80), (101, 80), (100, 81), (101, 81)
+```
 
-每个事件按 polarity 转成阈值增量：
+这只是建立“哪些 DAVIS pixels 是 core 17 的读出”的字典，不是重建，也没有 warp。
+
+**步骤 4.2：APS 的处理**
+
+函数 `extract_core_aps()` 读取 APS frame，在上述四个位置取值、除 gain、取中位数：
+
+```text
+APS[100,80], APS[101,80], APS[100,81], APS[101,81]
+  -> 除对应 gain
+  -> median
+  -> core_aps[17]
+```
+
+所以 APS 从 `260 x 346` 个 sensor pixels 变成 1415 个 core 值。
+
+**步骤 4.3：events 的处理**
+
+函数 `aggregate_cumulative_events()` 读取原始 event：
+
+```text
+(time, sensor_x, sensor_y, polarity)
+```
+
+它先建立 lookup table：
+
+```text
+(100, 80) -> (core=17, readout=0)
+(101, 80) -> (core=17, readout=1)
+...
+```
+
+每个原始 event 的 `(sensor_x, sensor_y)` 只被用这一次：查找它属于哪个 `(core, readout)`。随后代码把 ON/OFF event 按阈值变成正/负增量，并累积成：
+
+```text
+cumulative_event_change[time, core, readout]
+```
+
+对于 core 17，四路 selected pixels 最终得到的是四条随时间增长或下降的累计曲线，而不是四个移动坐标。
+
+当前实现只使用每芯选中的 4 个 readouts；同一芯斑中其他 sensor pixels 的 events 不进入 loss。这是为避免 spot overlap 和错误归属的保守选择。真实实验标定足够可靠时，可以改成使用完整 spot mask，并按 gain/threshold 加权。
+
+**到这里为止，没有发生 warp。** 原始 event 坐标已经被转换为 `(core, readout)` 索引，之后不再出现于 fibre 重建的空间计算中。
+
+#### 5. 第三段：正式重建中，运动究竟在哪里进入
+
+正式重建的循环在：
+
+```text
+isl_diff_event_clean/neurosr/fibre_pipeline.py::_optimise()
+```
+
+其中最关键的一行是：
+
+```python
+core_signals = model(image, shifts)
+```
+
+这里的 `model` 是：
+
+```text
+isl_diff_event_clean/neurosr/fibre_forward.py::FibreCoreForward.forward()
+```
+
+它接收：
+
+```text
+image   = 当前待恢复的远端物体图像
+shifts  = motion.npz 中的远端物体位移表
+```
+
+在 `FibreCoreForward.forward()` 中，代码用 `grid_sample()` 计算：对每个时刻、每个固定 fibre grid 位置，应该去远端图像的什么位置取样。核心公式是：
 
 $$
-\delta e
+\text{远端取样位置}
 =
-\begin{cases}
-+C_+, & p=+1,\\
--C_-, & p=-1,
-\end{cases}
+\frac{\text{固定 fibre 位置}}{M}
+-\text{远端物体位移}(t).
 $$
 
-再按 `[time, core, readout]` 累加，得到：
+接着代码依次执行：
 
-$$
-E_{i,r}(t)
-=
-C_+N_{i,r}^{+}(t)
--C_-N_{i,r}^{-}(t).
-$$
+```text
+移动后的远端取样
+  -> 可选 GRIN blur
+  -> 2.9 um 圆形芯孔径积分
+  -> 在 1415 个固定 core centre 取值
+  -> predicted core_signals[t, core]
+```
 
-前向模型则预测：
+然后 `_optimise()`：
 
-$$
-\hat E_{i,r}(t)
-=
-L\!\left(g_{i,r}c_i(t)I_{white}\right)
--L\!\left(g_{i,r}c_i(0)I_{white}\right),
-$$
+```text
+predicted core_signals
+  -> 时间平均 -> predicted core APS
+  -> lin-log response -> predicted cumulative core events
+  -> 与第二段得到的 core APS/core events 比较
+```
 
-其中 $L$ 是与 v2e 相同的 lin-log response。当前 loss 在 readout 维先取平均，再比较预测与观测：
+也就是说，**远端物体在模型里移动，近端 core centre 和 DAVIS spot 都不移动。** 这就是 fibre 版中相当于“利用运动”的位置。
 
-$$
-\mathcal L_{event}
-=
-\operatorname{Huber}
-\left(
-\frac{1}{R}\sum_r\hat E_{i,r}(t),
-\frac{1}{R}\sum_r E_{i,r}(t)
-\right).
-$$
+#### 6. 你说的“放到芯中心再 warp”具体对应哪段现有代码
 
-因此同一根芯的 4 路 event readouts 用于降低阈值量化和单 pixel 读出误差，但不会产生 4 个远端空间采样。
+如果按你的想法实现，伪代码会像这样：
 
-#### 5. “全部放在芯中心再 warp”与当前方法的关系
+```text
+for each raw event (t, sensor_x, sensor_y, polarity):
+    core = lookup_core[sensor_y, sensor_x]
+    x_core, y_core = core_centres[core]
+    x_warp, y_warp = warp(x_core, y_core, motion_at(t))
+    iwe[x_warp, y_warp] += polarity
+```
 
-把一根芯内所有事件的 sensor `(x,y)` 替换为对应 core centre，从概念上确实是在做 pixel-to-core collapse。它可以用来构造 core-domain event image，并可能作为未知运动的粗估计工具。
+这属于 IWE (image of warped events) / contrast-maximization 思路。仓库中真正执行这类操作的是普通场景版：
 
-但当前最终重建没有显式构造 IWE，也不逐事件 warp，原因有三点：
+```text
+neurosr/pipeline.py::_warp_and_render()
+  -> neurosr/events.py::warp_events_to_reference()
+  -> event_image()
+```
 
-1. 一根芯测到的是有限圆孔径内的总通光量，不是芯中心处的点值；
-2. 多个 DAVIS pixels 是同一芯信号的冗余阈值读出，把它们全部堆到中心会让一个芯因覆盖 pixels 较多而被不合理地重复加权；
-3. photometric event loss 能保留 ON/OFF 阈值、gain 和累计变化的物理量，而仅对中心事件做 contrast warp 会丢掉这些标定信息。
+该路径由 `NeuroSRM_demo.py` 使用，**不被 `FibreNeuroSR_demo.py` 调用**。所以不要把普通 `NeuroSRM_demo.py` 的 sensor-event warp 和 fibre 重建混为同一算法。
 
-当前方法等价于让每个固定 core aperture 随远端物体运动去扫描不同物体位置。第 $i$ 根芯的物理信号是：
+在 fibre 中，这种“先归芯、再放到 core centre、再 warp”的 IWE 可以作为后续的运动初始化模块，但使用前要先将每芯事件归一化或平均。若直接把一个芯内所有 raw events 全部叠到同一 centre，覆盖更多 DAVIS pixels 的芯会被重复加权，不能代表更多远端空间采样。
+
+#### 7. 为什么 fibre 的正式损失不采用这个 warp 作为主模型
+
+当前正式方法保留每芯的时间亮度模型：
 
 $$
 c_i(t)
@@ -274,17 +369,27 @@ A_i(\mathbf u-\mathbf r_i)
 \,d\mathbf u.
 $$
 
-空间信息来自 $\mathbf s(t)$ 改变后同一 aperture 覆盖了不同远端位置，而不是来自近端芯斑内部 event 的细微 `(x,y)` 差异。
+它表达的是“固定的第 $i$ 根芯在时刻 $t$ 收到多少总光”，而不是“第 $i$ 根芯的一个点坐标移动到哪里”。其优势是能同时利用：
 
-#### 6. 真实实验必须重新验证这一假设
+1. 芯孔径不是点而是有限圆形面积；
+2. APS 的绝对亮度；
+3. 每个 readout 的 gain；
+4. ON/OFF event 的 lin-log 阈值变化。
 
-如果真实光纤中芯内模式分布会随远端入射位置、弯曲、波长或相干 speckle 改变，那么 $I_{i,r}(t)=g_{i,r}c_i(t)$ 的固定 gain 假设会失效。此时不能简单平均全部芯内 pixels，需要改成：
+如果只做 centre warp IWE，适合让事件在某个运动假设下变清晰，却不直接保证重建结果能解释 APS 强度，也不显式建模芯孔径积分。
 
-- 多模式响应基；
-- 随状态变化的 per-core sensor footprint；
-- 或直接使用标定得到的线性/非线性 transmission operator。
+因此当前选择不是“芯中心方法错误”，而是：
 
-所以当前处理不是宣称“真实芯斑内部永远没有信息”，而是在方案 A 的标量 per-core 假设下，避免把未经验证的近端模式位置错误解释成远端亚像素。
+```text
+芯中心 + warp IWE      -> 很适合可视化和估计运动初值
+每芯光通量物理前向     -> 当前正式重建使用，用于恢复强度图
+```
+
+#### 8. 真实实验的边界
+
+以上解释依赖当前方案 A 的标量 per-core 假设：同一芯内的 sensor pixels 都是 $c_i(t)$ 的固定 gain 读出。真实光纤若存在随远端入射位置、弯曲、波长或相干 speckle 改变的芯内模式分布，这个假设可能失效。
+
+那时芯斑内部位置可能确实包含额外状态信息，但它不能未经标定就被当作远端亚像素。需要先测量多模式响应、状态相关 spot footprint，或更一般的 transmission operator，再决定是否把芯内事件位置纳入重建。
 
 ## 4. 可微前向模型
 
