@@ -611,6 +611,80 @@ $$
 
 Event prediction 则先乘每个 selected DAVIS readout 的 gain 和 `input_white_dn`，经过 lin-log response，再减去初始响应，得到每芯每路累计变化。
 
+**【进一步补充 2026-08-17：输入预处理与联合 loss 怎样对齐】**
+
+“联合”不是把 APS frame 和 event image 拼成一张图，而是：**同一个 latent image 经过同一个前向模型生成两种预测，分别与 APS 观测和 event 观测比较，最后把两个标量 loss 相加。**
+
+观测预处理集中在 `neurosr/fibre_data.py::load_fibre_observations()`：
+
+| 数据 | 预处理函数 | 送入优化的结果 |
+|---|---|---|
+| `aps_frame.npy` | `extract_core_aps()` | 每芯4个 selected pixels 除 gain 后取 median，得到 `observed_aps[1415]` |
+| `events.h5` | `aggregate_cumulative_events()` | event 的 `(x,y)` 只用于查所属 core/readout；ON/OFF 按阈值累计，得到 `observed_events[T,1415,4]` |
+| `motion.npz` | `load_fibre_observations()` | 得到 `timestamps[T]` 和 `shifts[T,2]` |
+
+APS 在联合重建中还有一个初始化用途：`fibre_pipeline.py::_initial_image()` 把 1415 个 `core_aps` 放在平均位移对应的物方位置并插值成初始图，再缩小到 `112 x 112` latent。它只是优化初值；真正约束结果的仍是下面的 loss。
+
+在 `neurosr/fibre_pipeline.py::_optimise()` 中，代码先每隔 `event_time_stride=5` 取一个时刻，然后执行：
+
+```python
+core_signals = model(image, shifts)  # [T_used, 1415]
+
+predicted_aps = trapezoidal_average(core_signals, times)  # [1415]
+aps_loss = mse(predicted_aps, observed_aps)
+
+predicted_events = predict_cumulative_event_change(
+    core_signals, gain, input_white_dn
+)  # [T_used, 1415, 4]
+event_loss = huber(
+    predicted_events.mean(dim=-1),
+    observed_events.mean(dim=-1),
+)
+```
+
+两条分支的对应关系是：
+
+```text
+同一个 predicted core_signals[T, core]
+  ├─ 时间积分 ─> predicted_aps[core]
+  │              对 observed_aps[core] 做 MSE
+  │
+  └─ gain + lin-log + 减初值 ─> predicted_events[T, core, readout]
+                                 对 observed_events 先在4路readout取平均，
+                                 再做 Huber loss
+```
+
+数学上：
+
+$$
+\mathcal L_{APS}
+=
+\frac{1}{N_c}\sum_i
+\left(\hat A_i-A_i^{obs}\right)^2,
+$$
+
+$$
+\mathcal L_{event}
+=
+\operatorname{Huber}
+\left(
+\frac{1}{4}\sum_r\hat E_{i,r}(t),
+\frac{1}{4}\sum_r E_{i,r}^{obs}(t)
+\right).
+$$
+
+最后 joint mode 使用：
+
+$$
+\mathcal L_{joint}
+=
+\mathcal L_{APS}
++0.03\mathcal L_{event}
++0.0015\mathcal L_{TV}.
+$$
+
+三项 loss 共享同一个 latent image，所以 APS 会把绝对亮度拉回正确尺度，events 会约束曝光期间每根芯的亮度变化，TV 则抑制欠定解中的蜂窝和高频噪声。反向传播更新的是 latent image，不是输入 APS、events 或固定运动轨迹。
+
 **步骤 G：反向传播**
 
 上述 bilinear sampling、Gaussian convolution、aperture convolution、core sampling、时间积分和 lin-log response 都由 PyTorch tensor 运算构成。损失对 $C$ 的梯度可以逐层传播回 $O$，再传播回 $Z$：
