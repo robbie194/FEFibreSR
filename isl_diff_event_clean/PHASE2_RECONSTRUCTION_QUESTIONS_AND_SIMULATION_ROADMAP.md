@@ -196,6 +196,125 @@ correlation:  0.951
 3. **光学可辨识 GT**：将 GT 投影到已知光学和采样可恢复带宽，用于判断算法是否接近系统信息上限；
 4. **观测域一致性**：APS 重投影、事件残差和留出时间点预测，证明结果确实解释了测量。
 
+#### 【进一步补充 2026-08-17】latent size 增大后 oracle 会怎样
+
+会显著提高。同参数化 oracle 的定义是：不经过光纤和事件模型，直接寻找该 latent grid 能表示的、最接近原始 GT 的图像：
+
+$$
+Z_n^*
+=
+\arg\min_{Z\in[0,1]^{n\times n}}
+\left\|U_n(Z)-O_{GT}\right\|_2^2,
+$$
+
+其中 $U_n$ 是从 `n x n` latent grid 到 `400 x 400` 评价网格的双线性展开。
+
+当前同一 USAF crop 的实测 representational oracle 为：
+
+| latent size | unknowns | oracle PSNR | oracle SSIM |
+|---:|---:|---:|---:|
+| 112 | 12,544 | 约 19.6 dB | 约 0.833 |
+| 200 | 40,000 | 约 24.0 dB | 约 0.934 |
+| 400 | 160,000 | 理想情况下为无穷大 | 1.000 |
+
+`400 x 400` 时，latent 和 GT 是同一网格，可以直接令 $Z=O_{GT}$，误差为零，所以理想 PSNR 为无穷大。有限迭代优化时可能只得到一个很大的有限 PSNR，但那是优化误差，不是表示能力限制。
+
+这张表只回答“这个网格能否表达 GT”，不能回答“光纤数据能否恢复 GT”。增大 latent size 会同时增加观测零空间：`400 x 400` 有 160,000 个未知量，而芯位置、芯孔径和有限轨迹并没有因此提供更多独立信息。正式重建可能因此更容易拟合事件量化、噪声和模型误差，所以必须把 representational oracle 与真实 reconstruction result 分开报告。
+
+#### 【进一步补充 2026-08-17】光学可辨识 GT 怎样计算
+
+“光学可辨识 GT”更准确地说是从原始 GT 派生出的 **identifiable reference**，不是另一个物理真值。建议分成两个层次计算。
+
+**方法 A：快速的光学带限参考**
+
+先计算 object-to-core 的有效传递函数：
+
+$$
+H_{eff}(f_x,f_y)
+=
+H_{GRIN}(f_x,f_y)
+H_{core\ aperture}(f_x,f_y).
+$$
+
+真实系统若直接在 sensor 域评价，还应乘 relay PSF 和 pixel integration 的传递函数。然后根据预先规定的噪声/SNR 门限 $\tau$ 构造平滑频率 mask：
+
+$$
+M_\tau(f_x,f_y)
+\approx
+\begin{cases}
+1, & |H_{eff}|\text{ 高于可辨识门限},\\
+0, & |H_{eff}|\text{ 已低于噪声或接近零}.
+\end{cases}
+$$
+
+带限参考为：
+
+$$
+O_{band}
+=
+\mathcal F^{-1}
+\left[
+M_\tau\,\mathcal F(O_{GT})
+\right].
+$$
+
+这里应使用带过渡区的 soft mask，避免 hard cutoff 产生 ringing。门限必须根据噪声模型或预先声明的 MTF/SNR 标准确定，不能为了提高重建分数事后调节。
+
+该方法容易实现，能排除被 GRIN 和芯孔径彻底压制的频率；但它没有完整考虑六角 core sampling 和 L 形运动的方向性，所以只能称为 optics-only reference。
+
+**方法 B：完整观测算子的可辨识投影，论文中更推荐**
+
+把当前完整前向写成：
+
+$$
+\mathbf y
+=
+F(O)
+=
+\left[
+\text{core APS}(O),
+\text{core events}(O)
+\right].
+$$
+
+$F$ 已包含 GRIN PSF、圆形芯孔径、1415 个芯位置、运动轨迹、曝光积分、gain 和 lin-log event response。由于 event response 非线性，在 GT 附近计算加权 Jacobian：
+
+$$
+J
+=
+\left.\frac{\partial F}{\partial O}\right|_{O_{GT}}.
+$$
+
+APS 和 events 的单位不同，应先分别除以各自噪声标准差，即进行 noise whitening。随后对 $J$ 做 SVD：
+
+$$
+J=U\Sigma V^T.
+$$
+
+只保留奇异值高于噪声门限的右奇异向量 $V_{keep}$，再将 GT 投影到这些可观测模式：
+
+$$
+O_{id}
+=
+O_0
++V_{keep}V_{keep}^T
+\left(O_{GT}-O_0\right),
+$$
+
+其中 $O_0$ 可以取 GT 均值图，保留由 APS 锚定的 DC。$O_{id}$ 同时体现光学低通、core lattice、轨迹方向和事件灵敏度，比单纯 Gaussian blur GT 更严格。
+
+实际矩阵可能是几十万维，不应显式构造完整 $J$。可以利用 PyTorch autograd 的 JVP/VJP 和 randomized SVD 计算主要奇异模式。若还没有可靠的真实噪声模型，可暂时使用相对奇异值或 condition-number 门限，但必须把门限作为实验参数报告。
+
+**当前项目建议的执行顺序**
+
+1. 先实现方法 A，保存 `optics_bandlimited_gt.npy` 和有效 MTF；
+2. 再用完整 `FibreCoreForward + APS/event observation model` 实现方法 B；
+3. 同时保存奇异值谱、保留模式数量和所用噪声门限；
+4. 分别计算 reconstruction 对原始 GT、同参数化 oracle、`O_band` 和 `O_id` 的指标；
+5. 原始 GT 指标始终保留，不能只展示更容易的带限参考。
+
+如果暂时不做 SVD，还可以用无噪声 GT 观测反求一张图，并用多个随机初始化检查稳定部分，作为 numerical projection oracle。但这个结果会依赖 TV 等正则，不能冒充唯一的光学可辨识 GT。
+
 对于 USAF 图样，还应增加 line profile、Michelson contrast、可分辨 group/element 和方向性 MTF，而不是只依赖整图 PSNR/SSIM。
 
 只与模糊后的 GT 比会让结果显得更好，却可能掩盖没有真正恢复高频的问题；只与原始 GT 比又会把物理上不可恢复的频率全部算成算法错误。四层评价一起报告才公平。
