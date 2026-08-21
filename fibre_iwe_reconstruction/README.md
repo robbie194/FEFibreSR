@@ -55,6 +55,15 @@ cd /home/robbie/tyf_code/EventCode/myFEFibreSR/fibre_iwe_reconstruction
   --config configs/two_dimensional.yaml
 ```
 
+包含停顿、反向和快速转向的复杂轨迹，以及低维/B-spline 同数据对比：
+
+```bash
+/home/robbie/miniconda3/envs/NeuroFibreSR/bin/python run_motion_comparison.py \
+  --config configs/complex_motion.yaml
+```
+
+B-spline 只有在观测 event loss 相对改善至少 `8%` 时才启用，否则自动保留低维轨迹。完整方法、两种场景的定量结果和可视化见 [BSPLINE_MOTION_COMPARISON_REPORT.md](BSPLINE_MOTION_COMPARISON_REPORT.md)。
+
 真实数据或已有观测：
 
 ```bash

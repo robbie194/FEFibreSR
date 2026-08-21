@@ -16,12 +16,8 @@ from .event_forward import (
     normalised_event_loss,
     predict_iwe_bins,
 )
+from .image_forward import predict_core_aps, second_order_regularizer
 from .motion import MotionEstimate
-from .render import (
-    sample_image_at_points,
-    sample_trajectory,
-    shift_image,
-)
 
 
 @dataclass(frozen=True)
@@ -84,26 +80,6 @@ def _event_forward_model(
     )
 
 
-def _motion_average(
-    image: torch.Tensor, trajectory: torch.Tensor, sample_count: int
-) -> torch.Tensor:
-    times = torch.linspace(0, 1, sample_count, device=image.device)
-    positions = sample_trajectory(trajectory, times)
-    reference = sample_trajectory(
-        trajectory, torch.tensor([0.5], device=image.device)
-    )[0]
-    frames = [shift_image(image, position - reference) for position in positions]
-    return torch.stack(frames).mean(dim=0)
-
-
-def _second_order_regularizer(image: torch.Tensor) -> torch.Tensor:
-    dxx = image[:, 2:] - 2 * image[:, 1:-1] + image[:, :-2]
-    dyy = image[2:, :] - 2 * image[1:-1, :] + image[:-2, :]
-    horizontal = torch.sqrt(dxx.square() + 1e-6).mean()
-    vertical = torch.sqrt(dyy.square() + 1e-6).mean()
-    return horizontal + vertical
-
-
 def _optimise_scale(
     initial: torch.Tensor,
     observations: CoreObservations,
@@ -136,10 +112,9 @@ def _optimise_scale(
         optimizer.zero_grad(set_to_none=True)
         aps_loss = torch.zeros((), device=device)
         if mode != "event":
-            blurred = _motion_average(
-                image, trajectory, int(config["aps_time_samples"])
+            predicted_aps = predict_core_aps(
+                image, centres, trajectory, int(config["aps_time_samples"])
             )
-            predicted_aps = sample_image_at_points(blurred, centres)
             aps_loss = F.smooth_l1_loss(
                 predicted_aps, core_aps, beta=float(config["aps_huber_beta"])
             )
@@ -149,7 +124,7 @@ def _optimise_scale(
             event_loss = normalised_event_loss(
                 predicted_iwe, event_model.observed_iwe_bins
             )
-        regularizer = _second_order_regularizer(image)
+        regularizer = second_order_regularizer(image)
         if mode == "event":
             gauge = (image.mean() - float(config["event_only_mean"])) ** 2
             gauge = gauge + (
@@ -240,8 +215,9 @@ def reconstruct(
     predicted_iwe_bins = predict_iwe_bins(joint_image, event_model.flow_xy_bins)
     observed_iwe = event_model.observed_iwe_bins.sum(0)
     predicted_iwe = predicted_iwe_bins.sum(0)
-    blurred = _motion_average(joint_image, trajectory, int(config["aps_time_samples"]))
-    predicted_aps = sample_image_at_points(blurred, centres)
+    predicted_aps = predict_core_aps(
+        joint_image, centres, trajectory, int(config["aps_time_samples"])
+    )
 
     def concatenate_histories(histories: list[np.ndarray]) -> np.ndarray:
         adjusted = []

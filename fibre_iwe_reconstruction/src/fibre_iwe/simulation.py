@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 import torch
 from PIL import Image
+from scipy.interpolate import PchipInterpolator
 
 from .config import ExperimentConfig
 from .geometry import (
@@ -45,6 +46,24 @@ def _prepare_object(config: ExperimentConfig) -> np.ndarray:
 def _motion(times: np.ndarray, motion_cfg: dict) -> np.ndarray:
     """A smooth, non-constant trajectory that the inverse never reads."""
     u = (times - times[0]) / (times[-1] - times[0])
+    model = str(motion_cfg.get("model", "smooth_arc"))
+    if model == "keyframes":
+        keyframe_times = np.asarray(motion_cfg["keyframe_times"], dtype=np.float64)
+        keyframe_positions = np.asarray(
+            motion_cfg["keyframe_positions_px"], dtype=np.float64
+        )
+        if (
+            keyframe_positions.shape != (len(keyframe_times), 2)
+            or keyframe_times[0] != 0
+            or keyframe_times[-1] != 1
+            or np.any(np.diff(keyframe_times) <= 0)
+        ):
+            raise ValueError("motion keyframes must be ordered 2-D positions on [0, 1]")
+        return PchipInterpolator(keyframe_times, keyframe_positions, axis=0)(u).astype(
+            np.float32
+        )
+    if model != "smooth_arc":
+        raise ValueError(f"unknown simulation motion model: {model}")
     endpoint = np.asarray(motion_cfg["end_shift_px"], dtype=np.float64)
     curvature = float(motion_cfg["curvature_px"])
     easing = u + 0.10 * np.sin(2 * np.pi * u) / (2 * np.pi)

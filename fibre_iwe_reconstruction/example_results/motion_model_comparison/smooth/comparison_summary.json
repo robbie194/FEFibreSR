@@ -1,0 +1,156 @@
+{
+  "models": {
+    "low_dimensional": {
+      "inverse_input_audit": {
+        "used": [
+          "observations/core_mask.npz (labels only)",
+          "observations/recording.h5"
+        ],
+        "not_used_by_reconstruction": [
+          "private_truth/object_effective_reference.npy",
+          "private_truth/motion_truth.npz",
+          "simulation event threshold",
+          "simulation PSF"
+        ]
+      },
+      "generation": {
+        "status": "reused existing observations"
+      },
+      "motion": {
+        "model": "low_dimensional",
+        "initial_iwe_contrast": 0.162690669298172,
+        "final_iwe_contrast": 0.16227959096431732,
+        "estimated_endpoint_xy_px": [
+          5.25,
+          4.75
+        ],
+        "cmax_endpoint_xy_px": [
+          3.75,
+          7.25
+        ],
+        "aps_event_endpoint_xy_px": [
+          5.25,
+          4.75
+        ],
+        "estimated_curvature_px": 1.5,
+        "estimated_easing_px": -0.25,
+        "trajectory_control_rmse_px": 0.17772525264603647,
+        "endpoint_error_px": 0.25
+      },
+      "data_fidelity": {
+        "aps_reprojection_rmse": 0.00025042780907824636,
+        "iwe_cosine_similarity": 0.9663094641325141,
+        "temporal_iwe_cosine_similarity": 0.845651388168335
+      },
+      "ground_truth_available": true,
+      "event_only_note": "Events constrain structure but not absolute log-intensity offset or scale; a configured mean/std gauge is used without APS.",
+      "metrics": {
+        "aps_interpolation": {
+          "psnr_db": 19.562423676825706,
+          "ssim": 0.7483034374376087,
+          "correlation": 0.9432746779601247,
+          "rmse": 0.10516683012247086
+        },
+        "event_only": {
+          "psnr_db": 10.598002903153532,
+          "ssim": 0.7249261508355971,
+          "correlation": 0.9009885916311849,
+          "rmse": 0.2951887845993042
+        },
+        "aps_only": {
+          "psnr_db": 21.650236948936108,
+          "ssim": 0.7911479763407877,
+          "correlation": 0.9604114314635286,
+          "rmse": 0.08269669860601425
+        },
+        "joint": {
+          "psnr_db": 27.054619329575004,
+          "ssim": 0.9109719972191624,
+          "correlation": 0.9893426234390913,
+          "rmse": 0.04438835382461548
+        }
+      }
+    },
+    "bspline": {
+      "inverse_input_audit": {
+        "used": [
+          "observations/core_mask.npz (labels only)",
+          "observations/recording.h5"
+        ],
+        "not_used_by_reconstruction": [
+          "private_truth/object_effective_reference.npy",
+          "private_truth/motion_truth.npz",
+          "simulation event threshold",
+          "simulation PSF"
+        ]
+      },
+      "generation": {
+        "status": "reused existing observations"
+      },
+      "motion": {
+        "model": "low_dimensional_fallback",
+        "initial_iwe_contrast": 0.162690669298172,
+        "final_iwe_contrast": 0.16227959096431732,
+        "estimated_endpoint_xy_px": [
+          5.25,
+          4.75
+        ],
+        "cmax_endpoint_xy_px": [
+          3.75,
+          7.25
+        ],
+        "aps_event_endpoint_xy_px": [
+          5.25,
+          4.75
+        ],
+        "estimated_curvature_px": 1.5,
+        "estimated_easing_px": -0.25,
+        "spline_control_count": 7,
+        "spline_final_objective": 0.3860896825790405,
+        "spline_candidate_event_improvement_fraction": 0.028036149787200534,
+        "trajectory_control_rmse_px": 0.17772525264603647,
+        "endpoint_error_px": 0.25
+      },
+      "data_fidelity": {
+        "aps_reprojection_rmse": 0.00026148391771130264,
+        "iwe_cosine_similarity": 0.9663073335133201,
+        "temporal_iwe_cosine_similarity": 0.8456477522850037
+      },
+      "ground_truth_available": true,
+      "event_only_note": "Events constrain structure but not absolute log-intensity offset or scale; a configured mean/std gauge is used without APS.",
+      "metrics": {
+        "aps_interpolation": {
+          "psnr_db": 19.562423676825706,
+          "ssim": 0.7483034374376087,
+          "correlation": 0.9432746779601247,
+          "rmse": 0.10516683012247086
+        },
+        "event_only": {
+          "psnr_db": 10.598002903153532,
+          "ssim": 0.7249261508355971,
+          "correlation": 0.9009885916311849,
+          "rmse": 0.2951887845993042
+        },
+        "aps_only": {
+          "psnr_db": 21.651573597108328,
+          "ssim": 0.7911896581375131,
+          "correlation": 0.9604244921168644,
+          "rmse": 0.0826839730143547
+        },
+        "joint": {
+          "psnr_db": 27.0540716308822,
+          "ssim": 0.9110683239956687,
+          "correlation": 0.989342400930665,
+          "rmse": 0.04439115151762962
+        }
+      }
+    }
+  },
+  "bspline_candidate_selected": false,
+  "bspline_improvement": {
+    "temporal_iwe_cosine_gain": -3.635883331298828e-06,
+    "trajectory_rmse_reduction_px": 0.0,
+    "joint_psnr_gain_db": -0.0005476986928059091,
+    "joint_ssim_gain": 9.632677650628363e-05
+  }
+}

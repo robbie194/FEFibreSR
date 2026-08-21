@@ -24,6 +24,11 @@ from fibre_iwe.output import save_reconstruction_results
 from fibre_iwe.reconstruction import ReconstructionResult
 from fibre_iwe.render import render_iwe, warp_events
 from fibre_iwe.simulation import _motion
+from fibre_iwe.trajectory import (
+    cubic_bspline_basis,
+    fit_cubic_bspline,
+    sample_cubic_bspline,
+)
 
 
 class CoreMaskTests(unittest.TestCase):
@@ -170,6 +175,45 @@ class TwoDimensionalModelTests(unittest.TestCase):
         self.assertAlmostEqual(
             float(normalised_event_loss(predicted, predicted)), 0.0, places=5
         )
+
+
+class ComplexTrajectoryTests(unittest.TestCase):
+    def test_cubic_bspline_preserves_endpoints_and_partition_of_unity(self) -> None:
+        times = np.linspace(0, 1, 31)
+        basis = cubic_bspline_basis(times, control_count=7)
+        np.testing.assert_allclose(basis.sum(1), 1.0, atol=1e-6)
+        controls = np.array(
+            [[0, 0], [1, 2], [3, 1], [2, 4], [5, 3], [4, 2], [6, 4]],
+            dtype=np.float32,
+        )
+        path = sample_cubic_bspline(controls, sample_count=31)
+        np.testing.assert_allclose(path[0], controls[0], atol=1e-6)
+        np.testing.assert_allclose(path[-1], controls[-1], atol=1e-6)
+
+    def test_bspline_fit_beats_a_straight_line_on_complex_motion(self) -> None:
+        times = np.linspace(0, 0.04, 201)
+        config = {
+            "model": "keyframes",
+            "keyframe_times": [0.0, 0.25, 0.45, 0.6, 0.8, 1.0],
+            "keyframe_positions_px": [
+                [0, 0],
+                [3, 1],
+                [3, 1],
+                [1, 4],
+                [5, 3],
+                [6, 4],
+            ],
+        }
+        truth = _motion(times, config)
+        sampled_truth = truth[::10]
+        controls = fit_cubic_bspline(sampled_truth, control_count=8)
+        fitted = sample_cubic_bspline(controls, sample_count=len(sampled_truth))
+        linear = np.linspace(truth[0], truth[-1], len(sampled_truth))
+        fitted_rmse = np.sqrt(np.mean(np.square(fitted - sampled_truth)))
+        linear_rmse = np.sqrt(np.mean(np.square(linear - sampled_truth)))
+        self.assertLess(fitted_rmse, 0.45 * linear_rmse)
+        velocity_x = np.diff(truth[:, 0])
+        self.assertTrue(np.any(velocity_x < -0.01))
 
 
 if __name__ == "__main__":

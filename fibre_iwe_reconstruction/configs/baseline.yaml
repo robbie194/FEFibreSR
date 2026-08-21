@@ -56,6 +56,33 @@ motion_estimation:
   path_curvature_search_px: [-2.0, 2.0, 0.25]
   path_easing_search_px: [-0.4, 0.4, 0.1]
   path_refinement_step_px: 0.05
+  spline_control_count: 6
+  spline_validation_shape: [96, 96]
+  spline_iterations: 250
+  spline_learning_rate: 0.025
+  spline_max_control_offset_px: 1.25
+  spline_smoothness_weight: 0.12
+  spline_deviation_weight: 0.004
+  spline_endpoint_weight: 0.05
+  spline_min_event_improvement_fraction: 0.08
+  spline_time_samples: 48
+  spline_time_bins: 1
+  spline_iwe_sigma_px: 1.0
+  spline_joint_refinement: true
+  spline_joint_shape: [96, 96]
+  spline_joint_iterations: 220
+  spline_joint_warmup_iterations: 100
+  spline_joint_image_lr: 0.02
+  spline_joint_motion_lr: 0.015
+  spline_joint_max_control_offset_px: 0.75
+  spline_joint_event_weight: 0.010
+  spline_joint_image_regularization_weight: 0.003
+  spline_joint_smoothness_weight: 0.12
+  spline_joint_deviation_weight: 0.003
+  spline_joint_endpoint_weight: 0.02
+  spline_joint_time_samples: 48
+  spline_joint_time_bins: 1
+  spline_joint_iwe_sigma_px: 1.0
 
 reconstruction:
   multiscale_shapes: [[96, 96], [192, 192]]

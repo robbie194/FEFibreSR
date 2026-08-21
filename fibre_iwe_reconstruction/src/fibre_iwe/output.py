@@ -113,7 +113,7 @@ def save_motion_diagnostics(
     axes[0].imshow(initial_iwe, cmap="magma")
     axes[0].set_title("IWE after linear endpoint")
     axes[1].imshow(final_iwe, cmap="magma")
-    axes[1].set_title("IWE after smooth path")
+    axes[1].set_title(f"IWE after {motion.model_name} path")
     axes[2].plot(
         motion.initial_control_positions_xy[:, 0],
         motion.initial_control_positions_xy[:, 1],
@@ -124,9 +124,10 @@ def save_motion_diagnostics(
         motion.control_positions_xy[:, 0],
         motion.control_positions_xy[:, 1],
         "o-",
-        label="estimated",
+        label=motion.model_name,
     )
     metrics: dict[str, Any] = {
+        "model": motion.model_name,
         "initial_iwe_contrast": float(np.var(initial_iwe)),
         "final_iwe_contrast": float(np.var(final_iwe)),
         "estimated_endpoint_xy_px": motion.control_positions_xy[-1].tolist(),
@@ -139,12 +140,20 @@ def save_motion_diagnostics(
             np.argmin(motion.endpoint_validation_scores[:, 3])
         ]
         metrics["aps_event_endpoint_xy_px"] = validation_best[:2].tolist()
-    if len(motion.path_validation_scores):
+    if motion.model_name.startswith("low_dimensional") and len(
+        motion.path_validation_scores
+    ):
         path_best = motion.path_validation_scores[
             np.argmin(motion.path_validation_scores[:, 2])
         ]
         metrics["estimated_curvature_px"] = float(path_best[0])
         metrics["estimated_easing_px"] = float(path_best[1])
+    if len(motion.spline_control_positions_xy):
+        metrics["spline_control_count"] = len(motion.spline_control_positions_xy)
+        metrics["spline_final_objective"] = float(motion.refinement_history[-1, 1])
+        metrics["spline_candidate_event_improvement_fraction"] = float(
+            motion.candidate_event_improvement_fraction
+        )
     if truth_path is not None:
         truth_time = np.linspace(0, 1, len(truth_path))
         control_time = np.linspace(0, 1, len(motion.control_positions_xy))
@@ -175,6 +184,13 @@ def save_motion_diagnostics(
         coarse_scores=motion.coarse_scores,
         endpoint_validation_scores=motion.endpoint_validation_scores,
         path_validation_scores=motion.path_validation_scores,
+        model_name=np.asarray(motion.model_name),
+        spline_control_positions_xy=motion.spline_control_positions_xy,
+        refinement_history=motion.refinement_history,
+        joint_refinement_history=motion.joint_refinement_history,
+        candidate_event_improvement_fraction=np.asarray(
+            motion.candidate_event_improvement_fraction
+        ),
     )
     return metrics
 

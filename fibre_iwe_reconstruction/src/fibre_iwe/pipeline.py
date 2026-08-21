@@ -10,7 +10,7 @@ import torch
 
 from .config import ExperimentConfig
 from .data import load_core_observations
-from .motion import estimate_motion
+from .motion import estimate_motion, jointly_refine_bspline_motion
 from .output import (
     save_generation_preview,
     save_motion_diagnostics,
@@ -64,6 +64,18 @@ def run_pipeline(
     )
     print("[3/4] estimating trajectory from APS/event consistency", flush=True)
     motion = estimate_motion(observations, config.values["motion_estimation"], device)
+    motion_config = config.values["motion_estimation"]
+    if motion.model_name == "bspline" and bool(
+        motion_config.get("spline_joint_refinement", True)
+    ):
+        print("      jointly refining B-spline motion and image", flush=True)
+        motion = jointly_refine_bspline_motion(
+            observations,
+            motion,
+            motion_config,
+            config.values["reconstruction"],
+            device,
+        )
     print(
         f"      estimated endpoint={motion.control_positions_xy[-1].round(3).tolist()}",
         flush=True,
