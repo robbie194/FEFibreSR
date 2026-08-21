@@ -32,17 +32,20 @@ def load_core_observations(observations_dir: Path) -> CoreObservations:
     if recording.sensor_shape != mask.labels.shape:
         raise ValueError("recording and core mask shapes differ")
     centres = centres_from_mask(mask.labels)
-    background = float(np.median(recording.aps_frame[mask.labels == 0]))
+    background_pixels = recording.aps_frame[mask.labels == 0]
+    if not len(background_pixels):
+        raise ValueError("core mask needs background pixels for APS offset estimation")
+    background = float(np.median(background_pixels))
     core_aps = np.empty(len(centres), dtype=np.float32)
     for core in range(len(centres)):
         selected = mask.labels == core + 1
-        corrected = (recording.aps_frame[selected] - background) / np.clip(
-            mask.flat_response[selected], 0.1, None
-        )
-        core_aps[core] = np.median(corrected)
+        core_aps[core] = np.median(recording.aps_frame[selected] - background)
     core_aps = np.clip(core_aps, 0, None)
 
     events = recording.events
+    duration = recording.exposure_end_s - recording.exposure_start_s
+    if duration <= 0:
+        raise ValueError("exposure_end_s must be greater than exposure_start_s")
     x = np.rint(events[:, 1]).astype(np.int32)
     y = np.rint(events[:, 2]).astype(np.int32)
     valid_sensor = (
@@ -53,9 +56,14 @@ def load_core_observations(observations_dir: Path) -> CoreObservations:
     )
     labels = np.zeros(len(events), dtype=np.int32)
     labels[valid_sensor] = mask.labels[y[valid_sensor], x[valid_sensor]]
-    valid = labels > 0
+    within_exposure = (
+        (events[:, 0] >= recording.exposure_start_s)
+        & (events[:, 0] <= recording.exposure_end_s)
+    )
+    valid = (labels > 0) & within_exposure
+    if not np.any(valid):
+        raise ValueError("recording contains no in-exposure events inside a core")
     core_index = labels[valid] - 1
-    duration = recording.exposure_end_s - recording.exposure_start_s
     normalized_time = np.clip(
         (events[valid, 0] - recording.exposure_start_s) / duration, 0, 1
     )

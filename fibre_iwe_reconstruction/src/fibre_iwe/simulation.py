@@ -81,6 +81,7 @@ def _generate_core_events(
     core_signals: np.ndarray,
     timestamps_s: np.ndarray,
     mask: CoreMask,
+    proximal_response: np.ndarray,
     threshold: float,
     threshold_jitter: float,
     noise_fraction: float,
@@ -94,8 +95,10 @@ def _generate_core_events(
     reference = log_signal[0].copy()
     pixels = core_pixel_lists(mask)
     pixel_probabilities = []
-    for core_index, candidates in enumerate(pixels, start=1):
-        gain = mask.flat_response[candidates[:, 1], candidates[:, 0]].astype(np.float64)
+    for candidates in pixels:
+        gain = proximal_response[candidates[:, 1], candidates[:, 0]].astype(
+            np.float64
+        )
         pixel_probabilities.append(gain / gain.sum())
 
     batches: list[np.ndarray] = []
@@ -140,14 +143,18 @@ def _generate_core_events(
 
 
 def _sensor_aps(
-    core_aps: np.ndarray, mask: CoreMask, noise_sigma: float, seed: int
+    core_aps: np.ndarray,
+    mask: CoreMask,
+    proximal_response: np.ndarray,
+    noise_sigma: float,
+    seed: int,
 ) -> np.ndarray:
     rng = np.random.default_rng(seed)
     labels = mask.labels
     frame = np.full(labels.shape, 0.015, dtype=np.float32)
     foreground = labels > 0
     frame[foreground] += (
-        core_aps[labels[foreground] - 1] * mask.flat_response[foreground]
+        core_aps[labels[foreground] - 1] * proximal_response[foreground]
     )
     frame += rng.normal(0, noise_sigma, frame.shape).astype(np.float32)
     return np.clip(frame, 0, 1).astype(np.float32)
@@ -165,12 +172,14 @@ def generate_observations(config: ExperimentConfig, device: torch.device) -> dic
         float(values["fibre"]["core_pitch_px"]),
         float(values["fibre"]["margin_px"]),
     )
-    mask = generate_irregular_core_mask(
+    simulated_geometry = generate_irregular_core_mask(
         sensor_shape,
         centres,
         float(values["fibre"]["proximal_spot_radius_px"]),
         seed,
     )
+    mask = simulated_geometry.core_mask
+    proximal_response = simulated_geometry.proximal_response
     duration = float(values["recording"]["duration_s"])
     dt = float(values["recording"]["sample_interval_s"])
     timestamps = np.linspace(0, duration, int(round(duration / dt)) + 1)
@@ -186,6 +195,7 @@ def generate_observations(config: ExperimentConfig, device: torch.device) -> dic
     aps_frame = _sensor_aps(
         core_aps,
         mask,
+        proximal_response,
         float(values["simulation_only"]["aps_noise_sigma"]),
         seed + 1,
     )
@@ -194,6 +204,7 @@ def generate_observations(config: ExperimentConfig, device: torch.device) -> dic
         core_signals,
         timestamps,
         mask,
+        proximal_response,
         float(event_cfg["contrast_threshold"]),
         float(event_cfg["threshold_log_sigma"]),
         float(event_cfg["background_noise_fraction"]),
@@ -207,7 +218,7 @@ def generate_observations(config: ExperimentConfig, device: torch.device) -> dic
         config.observations_dir / "README.json",
         {
             "reconstruction_contract": [
-                "core_mask.npz: measured pixel-to-core labels and flat-field response",
+                "core_mask.npz: measured pixel-to-core labels only",
                 "recording.h5: raw APS, raw events, exposure timestamps",
             ],
             "forbidden_inverse_inputs": ["object", "motion", "PSF", "event thresholds"],
@@ -228,6 +239,7 @@ def generate_observations(config: ExperimentConfig, device: torch.device) -> dic
         shifts_xy_px=shifts,
     )
     np.save(config.private_truth_dir / "core_signals.npy", core_signals)
+    np.save(config.private_truth_dir / "proximal_response.npy", proximal_response)
     write_json(
         config.private_truth_dir / "README.json",
         {"warning": "Evaluation only. Reconstruction must never read this directory."},

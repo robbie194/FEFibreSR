@@ -11,7 +11,7 @@ outputs/baseline/observations/core_mask.npz
 outputs/baseline/observations/recording.h5
 ```
 
-- `core_mask.npz`：实测时可由一次 flat-field 标定替换，包含 pixel-to-core label 和 mask 内 flat response；
+- `core_mask.npz`：实测时可由一次 flat-field 图像分割得到，只包含 pixel-to-core labels；
 - `recording.h5`：一帧原始 APS、原始 events、曝光起止时间。
 
 仿真 GT、真值运动、事件阈值和仿真 PSF 位于 `private_truth/`。它们只在重建结束后评价结果，重建函数没有这些输入。
@@ -49,12 +49,15 @@ cd /home/robbie/tyf_code/EventCode/myFEFibreSR/fibre_iwe_reconstruction
 /home/robbie/miniconda3/envs/NeuroFibreSR/bin/python run_pipeline.py
 ```
 
-仅替换真实观测后重建：
+仅使用已有观测重建：
 
 ```bash
 /home/robbie/miniconda3/envs/NeuroFibreSR/bin/python run_pipeline.py \
-  --reuse-observations
+  --reuse-observations \
+  --data-root /path/to/real_recording
 ```
+
+`/path/to/real_recording/observations/` 中只需放置 `core_mask.npz` 和 `recording.h5`。没有 `private_truth/` 时仍会保存全部重建结果，并使用 APS 重投影误差与 IWE cosine 一致性代替 GT 指标。
 
 测试：
 
@@ -72,8 +75,9 @@ cd /home/robbie/tyf_code/EventCode/myFEFibreSR/fibre_iwe_reconstruction
 
 保持两个文件的字段不变即可，不需要修改重建算法：
 
-- 将真实 flat-field 分割为 `labels`，背景为 0、每芯为连续正整数；`flat_response` 保存 mask 内相对响应；
+- 将真实 flat-field 图像分割为 `labels`，背景为 0、每芯为连续正整数；不保存或使用逐 pixel gain；
 - `recording.h5/events_t_s_x_y_p` 使用 `[timestamp_s, sensor_x, sensor_y, polarity]`；
+- `aps_frame` 预先转换为 `[0, 1]` 浮点强度，events 按 timestamp 排序且 polarity 为 `-1/+1`；
 - APS 与 events 使用同一 sensor shape 和设备时间基准。
 
 如果真实数据暴露明显的全局 APS/event 时间错位，再增加一个全局 delay；不默认引入逐 pixel 阈值、逐芯 PSF 或 transmission matrix。

@@ -15,6 +15,8 @@ sys.path.insert(0, str(ROOT / "src"))
 from fibre_iwe.data import load_core_observations
 from fibre_iwe.geometry import centres_from_mask, generate_irregular_core_mask
 from fibre_iwe.io import CoreMask, Recording, save_core_mask, save_recording
+from fibre_iwe.output import save_reconstruction_results
+from fibre_iwe.reconstruction import ReconstructionResult
 from fibre_iwe.render import render_iwe, warp_events
 
 
@@ -28,11 +30,22 @@ class CoreMaskTests(unittest.TestCase):
 
     def test_irregular_spots_do_not_overlap(self) -> None:
         centres = np.array([[6, 6], [14, 6], [10, 13]], dtype=np.float32)
-        mask = generate_irregular_core_mask((20, 20), centres, 2.2, seed=3)
+        geometry = generate_irregular_core_mask((20, 20), centres, 2.2, seed=3)
+        mask = geometry.core_mask
         self.assertEqual(int(mask.labels.max()), 3)
-        self.assertTrue(np.all(mask.flat_response[mask.labels > 0] > 0))
+        self.assertTrue(
+            np.all(geometry.proximal_response[mask.labels > 0] > 0)
+        )
         for label in range(1, 4):
             self.assertGreater(np.sum(mask.labels == label), 5)
+
+    def test_saved_mask_contains_labels_only(self) -> None:
+        labels = np.array([[0, 1], [0, 1]], dtype=np.int32)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "core_mask.npz"
+            save_core_mask(path, CoreMask(labels))
+            with np.load(path) as values:
+                self.assertEqual(values.files, ["labels"])
 
 
 class ObservationBoundaryTests(unittest.TestCase):
@@ -40,8 +53,7 @@ class ObservationBoundaryTests(unittest.TestCase):
         labels = np.zeros((8, 8), dtype=np.int32)
         labels[1:3, 1:3] = 1
         labels[5:7, 5:7] = 2
-        response = (labels > 0).astype(np.float32)
-        mask = CoreMask(labels, response)
+        mask = CoreMask(labels)
         aps = np.zeros((8, 8), dtype=np.float32)
         aps[labels == 1] = 0.3
         aps[labels == 2] = 0.8
@@ -57,6 +69,37 @@ class ObservationBoundaryTests(unittest.TestCase):
         np.testing.assert_allclose(observations.core_aps, [0.3, 0.8])
         np.testing.assert_allclose(observations.event_xy, [[1.5, 1.5], [5.5, 5.5]])
         np.testing.assert_array_equal(observations.event_polarity, [1, -1])
+
+
+class RealDataOutputTests(unittest.TestCase):
+    def test_results_do_not_require_ground_truth(self) -> None:
+        shape = (32, 32)
+        image = np.linspace(0.05, 0.95, np.prod(shape), dtype=np.float32).reshape(
+            shape
+        )
+        iwe = image - image.mean()
+        history = np.array([[0, 1.0, 0.5, 0.25, 0.1]], dtype=np.float64)
+        aps_pairs = np.array([[0.2, 0.21], [0.8, 0.79]], dtype=np.float32)
+        result = ReconstructionResult(
+            image,
+            image,
+            image,
+            iwe,
+            iwe,
+            np.ones(shape, dtype=np.float32),
+            history,
+            history,
+            aps_pairs,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            output_dir = Path(directory)
+            summary = save_reconstruction_results(
+                output_dir, result, None, {"status": "real data"}, {}
+            )
+            self.assertTrue((output_dir / "03_reconstruction_comparison.png").is_file())
+        self.assertFalse(summary["ground_truth_available"])
+        self.assertIsNone(summary["metrics"])
+        self.assertAlmostEqual(summary["data_fidelity"]["iwe_cosine_similarity"], 1.0)
 
 
 class EventWarpTests(unittest.TestCase):

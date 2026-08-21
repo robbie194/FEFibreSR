@@ -12,10 +12,9 @@ import numpy as np
 
 @dataclass(frozen=True)
 class CoreMask:
-    """Measured sensor-pixel assignment and flat-field response for each core."""
+    """Measured sensor-pixel assignment; 0 is background."""
 
     labels: np.ndarray
-    flat_response: np.ndarray
 
 
 @dataclass(frozen=True)
@@ -36,22 +35,21 @@ def write_json(path: Path, value: dict) -> None:
 
 def save_core_mask(path: Path, mask: CoreMask) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(
-        path,
-        labels=np.asarray(mask.labels, dtype=np.int32),
-        flat_response=np.asarray(mask.flat_response, dtype=np.float32),
-    )
+    np.savez_compressed(path, labels=np.asarray(mask.labels, dtype=np.int32))
 
 
 def load_core_mask(path: Path) -> CoreMask:
     with np.load(path) as values:
         labels = values["labels"].astype(np.int32)
-        response = values["flat_response"].astype(np.float32)
-    if labels.shape != response.shape or labels.ndim != 2:
-        raise ValueError("core mask arrays must have the same 2-D shape")
+    if labels.ndim != 2:
+        raise ValueError("core labels must be a 2-D array")
     if labels.min() < 0:
         raise ValueError("core labels must use 0 for background and positive core IDs")
-    return CoreMask(labels, response)
+    present = np.unique(labels)
+    expected = np.arange(int(labels.max()) + 1)
+    if not np.array_equal(present, expected):
+        raise ValueError("positive core labels must be contiguous")
+    return CoreMask(labels)
 
 
 def save_recording(path: Path, recording: Recording) -> None:

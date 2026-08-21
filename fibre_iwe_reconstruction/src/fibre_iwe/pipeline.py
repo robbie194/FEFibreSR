@@ -26,6 +26,16 @@ def _device(name: str) -> torch.device:
     return torch.device(name)
 
 
+def _load_optional_array(path: Path, key: str | None = None) -> np.ndarray | None:
+    """Load evaluation truth when present without making it an inverse input."""
+    if not path.is_file():
+        return None
+    if key is None:
+        return np.load(path)
+    with np.load(path) as values:
+        return values[key]
+
+
 def run_pipeline(
     config: ExperimentConfig,
     *,
@@ -63,14 +73,21 @@ def run_pipeline(
 
     config.results_dir.mkdir(parents=True, exist_ok=True)
     save_generation_preview(config.results_dir, config.observations_dir)
-    truth_motion = np.load(config.private_truth_dir / "motion_truth.npz")["shifts_xy_px"]
+    truth_motion = _load_optional_array(
+        config.private_truth_dir / "motion_truth.npz", "shifts_xy_px"
+    )
     motion_metrics = save_motion_diagnostics(
         config.results_dir, observations, motion, truth_motion
     )
-    truth = np.load(config.private_truth_dir / "object_effective_reference.npy")
+    truth = _load_optional_array(
+        config.private_truth_dir / "object_effective_reference.npy"
+    )
     summary = save_reconstruction_results(
         config.results_dir, result, truth, generation_summary, motion_metrics
     )
-    print("      joint metrics:", summary["metrics"]["joint"], flush=True)
+    if summary["metrics"] is not None:
+        print("      joint metrics:", summary["metrics"]["joint"], flush=True)
+    else:
+        print("      data fidelity:", summary["data_fidelity"], flush=True)
     print(f"      saved: {config.results_dir}", flush=True)
     return summary

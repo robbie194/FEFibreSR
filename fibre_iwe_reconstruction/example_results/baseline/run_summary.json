@@ -1,7 +1,7 @@
 {
   "inverse_input_audit": {
     "used": [
-      "observations/core_mask.npz",
+      "observations/core_mask.npz (labels only)",
       "observations/recording.h5"
     ],
     "not_used_by_reconstruction": [
@@ -23,27 +23,36 @@
   "motion": {
     "initial_iwe_contrast": 0.1248643547296524,
     "final_iwe_contrast": 0.12576507031917572,
+    "estimated_endpoint_xy_px": [
+      5.25,
+      0.0
+    ],
     "trajectory_control_rmse_px": 0.16838859938778789,
     "endpoint_error_px": 0.25
   },
+  "data_fidelity": {
+    "aps_reprojection_rmse": 0.0011850432492792606,
+    "iwe_cosine_similarity": 0.9780766676703999
+  },
+  "ground_truth_available": true,
   "metrics": {
     "aps_interpolation": {
-      "psnr_db": 19.675610456606517,
-      "ssim": 0.7325659236157623,
-      "correlation": 0.9417404948196026,
-      "rmse": 0.1038052886724472
+      "psnr_db": 19.72888206629539,
+      "ssim": 0.7663306755443337,
+      "correlation": 0.9425464076134985,
+      "rmse": 0.10317058116197586
     },
     "aps_only": {
-      "psnr_db": 20.932952997438775,
-      "ssim": 0.7444608592852252,
-      "correlation": 0.9521128004783911,
-      "rmse": 0.08981572091579437
+      "psnr_db": 21.0099274791516,
+      "ssim": 0.7933598548213175,
+      "correlation": 0.9529256555110432,
+      "rmse": 0.08902329206466675
     },
     "joint": {
-      "psnr_db": 22.99745068373621,
-      "ssim": 0.8195982604974312,
-      "correlation": 0.9725782254906937,
-      "rmse": 0.07081536203622818
+      "psnr_db": 23.11011876663567,
+      "ssim": 0.8645081386013268,
+      "correlation": 0.9732995539968533,
+      "rmse": 0.06990271806716919
     }
   }
 }

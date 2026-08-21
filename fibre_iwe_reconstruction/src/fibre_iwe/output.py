@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
+from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,11 +13,6 @@ from .data import CoreObservations
 from .io import load_core_mask, load_recording, write_json
 from .motion import MotionEstimate
 from .reconstruction import ReconstructionResult
-
-
-def _normalise(image: np.ndarray) -> np.ndarray:
-    low, high = np.percentile(image, (1, 99))
-    return np.clip((image - low) / max(high - low, 1e-8), 0, 1)
 
 
 def _metrics(image: np.ndarray, truth: np.ndarray, border: int = 12) -> dict[str, float]:
@@ -31,6 +26,24 @@ def _metrics(image: np.ndarray, truth: np.ndarray, border: int = 12) -> dict[str
     }
 
 
+def _data_fidelity_metrics(result: ReconstructionResult) -> dict[str, float]:
+    aps_observed = result.aps_observed_predicted[:, 0]
+    aps_predicted = result.aps_observed_predicted[:, 1]
+    observed_iwe = result.observed_iwe.ravel().astype(np.float64)
+    predicted_iwe = result.predicted_iwe.ravel().astype(np.float64)
+    observed_iwe -= observed_iwe.mean()
+    predicted_iwe -= predicted_iwe.mean()
+    denominator = np.linalg.norm(observed_iwe) * np.linalg.norm(predicted_iwe)
+    return {
+        "aps_reprojection_rmse": float(
+            np.sqrt(np.mean(np.square(aps_observed - aps_predicted)))
+        ),
+        "iwe_cosine_similarity": float(
+            np.dot(observed_iwe, predicted_iwe) / max(denominator, 1e-12)
+        ),
+    }
+
+
 def save_generation_preview(output_dir: Path, observations_dir: Path) -> None:
     mask = load_core_mask(observations_dir / "core_mask.npz")
     recording = load_recording(observations_dir / "recording.h5")
@@ -38,7 +51,13 @@ def save_generation_preview(output_dir: Path, observations_dir: Path) -> None:
     if len(recording.events):
         x = recording.events[:, 1].astype(np.int32)
         y = recording.events[:, 2].astype(np.int32)
-        np.add.at(event_map, (y, x), recording.events[:, 3])
+        valid = (
+            (x >= 0)
+            & (x < recording.sensor_shape[1])
+            & (y >= 0)
+            & (y < recording.sensor_shape[0])
+        )
+        np.add.at(event_map, (y[valid], x[valid]), recording.events[valid, 3])
     figure, axes = plt.subplots(1, 3, figsize=(12, 4), dpi=180)
     axes[0].imshow(mask.labels, cmap="turbo")
     axes[0].set_title("Known core mask")
@@ -59,7 +78,7 @@ def save_motion_diagnostics(
     observations: CoreObservations,
     motion: MotionEstimate,
     truth_path: np.ndarray | None,
-) -> dict[str, float]:
+) -> dict[str, Any]:
     from .render import render_iwe
     import torch
 
@@ -92,9 +111,10 @@ def save_motion_diagnostics(
         "o-",
         label="estimated",
     )
-    metrics: dict[str, float] = {
+    metrics: dict[str, Any] = {
         "initial_iwe_contrast": float(np.var(initial_iwe)),
         "final_iwe_contrast": float(np.var(final_iwe)),
+        "estimated_endpoint_xy_px": motion.control_positions_xy[-1].tolist(),
     }
     if truth_path is not None:
         truth_time = np.linspace(0, 1, len(truth_path))
@@ -132,7 +152,7 @@ def save_motion_diagnostics(
 def save_reconstruction_results(
     output_dir: Path,
     result: ReconstructionResult,
-    truth: np.ndarray,
+    truth: np.ndarray | None,
     generation_summary: dict,
     motion_metrics: dict,
 ) -> dict:
@@ -150,13 +170,14 @@ def save_reconstruction_results(
     }
     for name, value in arrays.items():
         np.save(output_dir / f"{name}.npy", value)
-    panels = (
-        ("Effective GT (evaluation only)", truth),
+    panels = [
         ("APS interpolation", result.initial_aps),
         ("APS-only deblur", result.aps_only),
         ("APS + core-IWE", result.joint),
-    )
-    figure, axes = plt.subplots(1, 4, figsize=(16, 4), dpi=200)
+    ]
+    if truth is not None:
+        panels.insert(0, ("Effective GT (evaluation only)", truth))
+    figure, axes = plt.subplots(1, len(panels), figsize=(4 * len(panels), 4), dpi=200)
     for axis, (title, image) in zip(axes, panels, strict=True):
         axis.imshow(image, cmap="gray", vmin=0, vmax=1)
         axis.set_title(title)
@@ -195,9 +216,19 @@ def save_reconstruction_results(
     figure.savefig(output_dir / "05_loss_and_reprojection.png")
     plt.close(figure)
 
+    reference_metrics = None
+    if truth is not None:
+        reference_metrics = {
+            "aps_interpolation": _metrics(result.initial_aps, truth),
+            "aps_only": _metrics(result.aps_only, truth),
+            "joint": _metrics(result.joint, truth),
+        }
     summary = {
         "inverse_input_audit": {
-            "used": ["observations/core_mask.npz", "observations/recording.h5"],
+            "used": [
+                "observations/core_mask.npz (labels only)",
+                "observations/recording.h5",
+            ],
             "not_used_by_reconstruction": [
                 "private_truth/object_effective_reference.npy",
                 "private_truth/motion_truth.npz",
@@ -207,11 +238,9 @@ def save_reconstruction_results(
         },
         "generation": generation_summary,
         "motion": motion_metrics,
-        "metrics": {
-            "aps_interpolation": _metrics(result.initial_aps, truth),
-            "aps_only": _metrics(result.aps_only, truth),
-            "joint": _metrics(result.joint, truth),
-        },
+        "data_fidelity": _data_fidelity_metrics(result),
+        "ground_truth_available": truth is not None,
+        "metrics": reference_metrics,
     }
     write_json(output_dir / "run_summary.json", summary)
     return summary

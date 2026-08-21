@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 
@@ -26,6 +27,11 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="skip simulation and reconstruct existing observation files",
     )
+    parser.add_argument(
+        "--data-root",
+        type=Path,
+        help="root containing observations/ and receiving results/",
+    )
     parser.add_argument("--device", choices=("cpu", "cuda"))
     return parser.parse_args()
 
@@ -33,6 +39,8 @@ def parse_arguments() -> argparse.Namespace:
 def main() -> None:
     arguments = parse_arguments()
     config = load_config(arguments.config)
+    if arguments.data_root is not None:
+        config = replace(config, output_root=arguments.data_root.resolve())
     run_pipeline(
         config,
         generate=not arguments.reuse_observations,

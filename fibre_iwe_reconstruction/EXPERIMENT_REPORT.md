@@ -12,20 +12,20 @@
 
 | 文件 | 可观测内容 | 用途 |
 | --- | --- | --- |
-| `observations/core_mask.npz` | pixel-to-core labels、mask 内 flat response | 确定芯归属、芯中心和 APS 芯强度 |
+| `observations/core_mask.npz` | pixel-to-core labels | 确定芯归属、芯中心和 APS 芯强度 |
 | `observations/recording.h5` | 原始 APS、`[t, x, y, p]` events、曝光时间 | 运动估计和图像重建 |
 
 以下内容放在 `private_truth/`，只在反演完成后用于作图和评价：
 
 - 有效图像 GT；
 - 真实运动轨迹；
-- 仿真中的事件阈值、光学模糊和芯信号。
+- 仿真中的事件阈值、光学模糊、近端响应图和芯信号。
 
-代码边界位于 `src/fibre_iwe/pipeline.py`：先调用 `load_core_observations()`、`estimate_motion()` 和 `reconstruct()`，之后才读取 `private_truth`。因此评价真值没有泄漏到反演过程。
+代码边界位于 `src/fibre_iwe/pipeline.py`：先调用 `load_core_observations()`、`estimate_motion()` 和 `reconstruct()`，之后才尝试读取可选的 `private_truth`。因此评价真值没有泄漏到反演过程；真实数据完全没有该目录也能运行。
 
 ## 3. 仿真是否接近真实光纤
 
-仿真先把远端连续图像经过共享有效模糊，再在运动过程中采样为每根芯的标量强度。每芯根据 log 强度阈值跨越产生 `(core_id, timestamp, polarity)`；传感器上的 `(x,y)` 则按该芯不规则、非均匀的固定亮斑随机分配。
+仿真先把远端连续图像经过共享有效模糊，再在运动过程中采样为每根芯的标量强度。每芯根据 log 强度阈值跨越产生 `(core_id, timestamp, polarity)`；传感器上的 `(x,y)` 则按该芯不规则、非均匀的固定亮斑随机分配。该近端响应图只用于生成并保存在 `private_truth`，反演不知道它。
 
 这比“把 event 的近端 pixel 坐标当成远端亚纤芯位置”更符合当前物理假设：芯内坐标只表示近端模式和传感器响应，不携带可直接反投影的远端空间坐标。
 
@@ -72,11 +72,11 @@ $$
 
 | 方法 | PSNR | SSIM | Correlation | RMSE |
 | --- | ---: | ---: | ---: | ---: |
-| APS interpolation | 19.6756 dB | 0.73257 | 0.94174 | 0.10381 |
-| APS-only optimization | 20.9330 dB | 0.74446 | 0.95211 | 0.08982 |
-| APS + core-IWE | **22.9975 dB** | **0.81960** | **0.97258** | **0.07082** |
+| APS interpolation | 19.7289 dB | 0.76633 | 0.94255 | 0.10317 |
+| APS-only optimization | 21.0099 dB | 0.79336 | 0.95293 | 0.08902 |
+| APS + core-IWE | **23.1101 dB** | **0.86451** | **0.97330** | **0.06990** |
 
-相对 APS-only，联合结果提升约 `2.06 dB` PSNR 和 `0.075` SSIM。说明在同一 APS 观测和同一图像参数化下，core-IWE 提供了有效的方向性边缘约束。
+相对 APS-only，联合结果提升约 `2.10 dB` PSNR 和 `0.071` SSIM。APS 重投影 RMSE 为 `0.001185`，观测/预测 IWE cosine 为 `0.97808`。说明在同一 APS 观测和同一图像参数化下，core-IWE 提供了有效的方向性边缘约束。
 
 ![重建结果对比](example_results/baseline/03_reconstruction_comparison.png)
 
@@ -91,7 +91,7 @@ $$
 | 简化 | 当前处理 | 适用边界 |
 | --- | --- | --- |
 | 运动轨迹 | 由 core-IWE 盲估计 | 事件足够、运动能激发清晰边缘时可行 |
-| pixel gain、事件阈值 | IWE 归一化后不逐 pixel 标定 | 存在明显芯间系统偏差时再加逐芯权重 |
+| pixel gain、事件阈值 | 不读取仿真响应；每芯 APS 用中位数提取，IWE 做归一化 | 存在明显芯间系统偏差时再加逐芯权重 |
 | `h_eff` | 固定共享模糊，或吸收到有效图像 | 当前恢复的是有效图像，不声称得到去除全部光学模糊的物体 |
 | 芯内 event 位置 | 只用于 core 归属 | 不把近端芯斑内部位置解释为远端位置 |
 | APS/event delay | 默认零 | 只有观察到稳定错位时才估计一个全局 delay |
@@ -102,9 +102,11 @@ $$
 
 真实实验只需保持两个观测文件的字段约定：
 
-1. 用 flat-field 图像生成 `core_mask.npz`，背景 label 为 0，每根芯为独立正整数，并保存 mask 内相对响应；
+1. 用 flat-field 图像分割出 `core_mask.npz`，背景 label 为 0，每根芯为独立正整数；文件只保存 `labels`；
 2. 将原始 APS、events 和曝光时间写入 `recording.h5`，保证 APS/events 使用同一 sensor 坐标和设备时钟；
-3. 运行 `run_pipeline.py --reuse-observations`，重建不读取任何仿真真值；
+3. 运行 `run_pipeline.py --reuse-observations --data-root /path/to/real_recording`，重建不读取任何仿真真值；
 4. 检查 core-IWE 聚焦、APS 重投影和结果稳定性。只有诊断显示系统性残差时，才依次增加全局 delay、逐芯 gain/threshold 或更复杂的 `h_eff`。
 
 真实数据没有 GT 时不能报告 PSNR/SSIM，应改用 APS 重投影误差、event/IWE 一致性、重复采集稳定性，以及分辨率靶的可分辨线对作为证据。
+
+本实现已用一个只含上述两个观测文件、完全没有 `private_truth/` 的独立目录做过端到端验证：运动估计、联合重建、五张诊断图和 `run_summary.json` 均能正常生成，摘要中的 `metrics` 为 `null`，不会伪造 GT 评价。

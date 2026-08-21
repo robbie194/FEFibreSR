@@ -2,10 +2,20 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import cv2
 import numpy as np
 
 from .io import CoreMask
+
+
+@dataclass(frozen=True)
+class SimulatedCoreGeometry:
+    """Core labels plus a private, simulation-only proximal response map."""
+
+    core_mask: CoreMask
+    proximal_response: np.ndarray
 
 
 def hexagonal_centres(
@@ -33,7 +43,7 @@ def generate_irregular_core_mask(
     centres_xy: np.ndarray,
     radius_px: float,
     seed: int,
-) -> CoreMask:
+) -> SimulatedCoreGeometry:
     """Create non-circular, nonuniform proximal spots without overlap."""
     rng = np.random.default_rng(seed)
     height, width = shape
@@ -58,9 +68,11 @@ def generate_irregular_core_mask(
         labels[candidate] = core_index
         local_gain = np.exp(-0.65 * distance[candidate])
         local_gain *= rng.lognormal(mean=0.0, sigma=0.12, size=candidate.sum())
-        local_gain /= np.mean(local_gain)
+        # Equal median throughput keeps pixel gain unknown but avoids injecting a
+        # separate per-core calibration problem into this baseline experiment.
+        local_gain /= np.median(local_gain)
         response[candidate] = local_gain.astype(np.float32)
-    return CoreMask(labels, response)
+    return SimulatedCoreGeometry(CoreMask(labels), response)
 
 
 def centres_from_mask(labels: np.ndarray) -> np.ndarray:
