@@ -22,19 +22,31 @@
   },
   "motion": {
     "initial_iwe_contrast": 0.1248643547296524,
-    "final_iwe_contrast": 0.12576507031917572,
+    "final_iwe_contrast": 0.12363783270120621,
     "estimated_endpoint_xy_px": [
+      5.25,
+      -1.146411342626294e-15
+    ],
+    "cmax_endpoint_xy_px": [
       5.25,
       0.0
     ],
-    "trajectory_control_rmse_px": 0.16838859938778789,
+    "aps_event_endpoint_xy_px": [
+      5.25,
+      -0.25
+    ],
+    "estimated_curvature_px": -0.15000000596046448,
+    "estimated_easing_px": -0.10000000149011612,
+    "trajectory_control_rmse_px": 0.12700849674140854,
     "endpoint_error_px": 0.25
   },
   "data_fidelity": {
-    "aps_reprojection_rmse": 0.0011850432492792606,
-    "iwe_cosine_similarity": 0.9780766676703999
+    "aps_reprojection_rmse": 0.00022044168144930154,
+    "iwe_cosine_similarity": 0.9918337727489469,
+    "temporal_iwe_cosine_similarity": 0.9918337464332581
   },
   "ground_truth_available": true,
+  "event_only_note": "Events constrain structure but not absolute log-intensity offset or scale; a configured mean/std gauge is used without APS.",
   "metrics": {
     "aps_interpolation": {
       "psnr_db": 19.72888206629539,
@@ -42,17 +54,23 @@
       "correlation": 0.9425464076134985,
       "rmse": 0.10317058116197586
     },
+    "event_only": {
+      "psnr_db": 10.020650340359925,
+      "ssim": 0.6080402213300231,
+      "correlation": 0.8461001537342049,
+      "rmse": 0.3154768645763397
+    },
     "aps_only": {
-      "psnr_db": 21.0099274791516,
-      "ssim": 0.7933598548213175,
-      "correlation": 0.9529256555110432,
-      "rmse": 0.08902329206466675
+      "psnr_db": 21.11630830119895,
+      "ssim": 0.7967796707291351,
+      "correlation": 0.9541595108240514,
+      "rmse": 0.08793962746858597
     },
     "joint": {
-      "psnr_db": 23.11011876663567,
-      "ssim": 0.8645081386013268,
-      "correlation": 0.9732995539968533,
-      "rmse": 0.06990271806716919
+      "psnr_db": 23.651830856071236,
+      "ssim": 0.8746714328330705,
+      "correlation": 0.9755752785014581,
+      "rmse": 0.0656762644648552
     }
   }
 }

@@ -34,12 +34,27 @@ def _data_fidelity_metrics(result: ReconstructionResult) -> dict[str, float]:
     observed_iwe -= observed_iwe.mean()
     predicted_iwe -= predicted_iwe.mean()
     denominator = np.linalg.norm(observed_iwe) * np.linalg.norm(predicted_iwe)
+    observed_bins = result.observed_iwe_bins.reshape(len(result.observed_iwe_bins), -1)
+    predicted_bins = result.predicted_iwe_bins.reshape(
+        len(result.predicted_iwe_bins), -1
+    )
+    observed_bins = observed_bins - observed_bins.mean(1, keepdims=True)
+    predicted_bins = predicted_bins - predicted_bins.mean(1, keepdims=True)
+    observed_norms = np.linalg.norm(observed_bins, axis=1)
+    predicted_norms = np.linalg.norm(predicted_bins, axis=1)
+    active = observed_norms > 1e-12
+    temporal_cosines = np.sum(observed_bins * predicted_bins, axis=1) / np.maximum(
+        observed_norms * predicted_norms, 1e-12
+    )
     return {
         "aps_reprojection_rmse": float(
             np.sqrt(np.mean(np.square(aps_observed - aps_predicted)))
         ),
         "iwe_cosine_similarity": float(
             np.dot(observed_iwe, predicted_iwe) / max(denominator, 1e-12)
+        ),
+        "temporal_iwe_cosine_similarity": float(
+            np.average(temporal_cosines[active], weights=observed_norms[active])
         ),
     }
 
@@ -96,14 +111,14 @@ def save_motion_diagnostics(
     ).numpy()
     figure, axes = plt.subplots(1, 3, figsize=(12, 4), dpi=180)
     axes[0].imshow(initial_iwe, cmap="magma")
-    axes[0].set_title("IWE after coarse motion")
+    axes[0].set_title("IWE after linear endpoint")
     axes[1].imshow(final_iwe, cmap="magma")
-    axes[1].set_title("IWE after CMax")
+    axes[1].set_title("IWE after smooth path")
     axes[2].plot(
         motion.initial_control_positions_xy[:, 0],
         motion.initial_control_positions_xy[:, 1],
         "o--",
-        label="coarse",
+        label="linear",
     )
     axes[2].plot(
         motion.control_positions_xy[:, 0],
@@ -116,6 +131,20 @@ def save_motion_diagnostics(
         "final_iwe_contrast": float(np.var(final_iwe)),
         "estimated_endpoint_xy_px": motion.control_positions_xy[-1].tolist(),
     }
+    if len(motion.coarse_scores):
+        cmax_best = motion.coarse_scores[np.argmax(motion.coarse_scores[:, 3])]
+        metrics["cmax_endpoint_xy_px"] = cmax_best[:2].tolist()
+    if len(motion.endpoint_validation_scores):
+        validation_best = motion.endpoint_validation_scores[
+            np.argmin(motion.endpoint_validation_scores[:, 3])
+        ]
+        metrics["aps_event_endpoint_xy_px"] = validation_best[:2].tolist()
+    if len(motion.path_validation_scores):
+        path_best = motion.path_validation_scores[
+            np.argmin(motion.path_validation_scores[:, 2])
+        ]
+        metrics["estimated_curvature_px"] = float(path_best[0])
+        metrics["estimated_easing_px"] = float(path_best[1])
     if truth_path is not None:
         truth_time = np.linspace(0, 1, len(truth_path))
         control_time = np.linspace(0, 1, len(motion.control_positions_xy))
@@ -143,8 +172,9 @@ def save_motion_diagnostics(
         output_dir / "motion_estimate.npz",
         initial_control_positions_xy=motion.initial_control_positions_xy,
         control_positions_xy=motion.control_positions_xy,
-        loss_history=motion.loss_history,
         coarse_scores=motion.coarse_scores,
+        endpoint_validation_scores=motion.endpoint_validation_scores,
+        path_validation_scores=motion.path_validation_scores,
     )
     return metrics
 
@@ -159,11 +189,16 @@ def save_reconstruction_results(
     output_dir.mkdir(parents=True, exist_ok=True)
     arrays = {
         "initial_aps": result.initial_aps,
+        "event_only": result.event_only,
         "aps_only": result.aps_only,
         "joint": result.joint,
         "observed_iwe": result.observed_iwe,
         "predicted_iwe": result.predicted_iwe,
         "observability": result.observability,
+        "observed_iwe_bins": result.observed_iwe_bins,
+        "predicted_iwe_bins": result.predicted_iwe_bins,
+        "event_flow_xy_bins": result.event_flow_xy_bins,
+        "loss_history_event_only": result.loss_history_event_only,
         "loss_history_aps": result.loss_history_aps,
         "loss_history_joint": result.loss_history_joint,
         "aps_observed_predicted": result.aps_observed_predicted,
@@ -172,6 +207,7 @@ def save_reconstruction_results(
         np.save(output_dir / f"{name}.npy", value)
     panels = [
         ("APS interpolation", result.initial_aps),
+        ("Event-only image\n(shared blind motion)", result.event_only),
         ("APS-only deblur", result.aps_only),
         ("APS + core-IWE", result.joint),
     ]
@@ -216,10 +252,37 @@ def save_reconstruction_results(
     figure.savefig(output_dir / "05_loss_and_reprojection.png")
     plt.close(figure)
 
+    displayed_bins = np.linspace(
+        0, len(result.observed_iwe_bins) - 1, min(4, len(result.observed_iwe_bins))
+    ).round().astype(int)
+    figure, axes = plt.subplots(
+        2, len(displayed_bins), figsize=(3.2 * len(displayed_bins), 6.2), dpi=180
+    )
+    axes = np.asarray(axes).reshape(2, -1)
+    for column, bin_index in enumerate(displayed_bins):
+        observed = result.observed_iwe_bins[bin_index]
+        predicted = result.predicted_iwe_bins[bin_index]
+        observed_limit = max(float(np.percentile(np.abs(observed), 99.5)), 1e-8)
+        predicted_limit = max(float(np.percentile(np.abs(predicted), 99.5)), 1e-8)
+        axes[0, column].imshow(
+            observed, cmap="coolwarm", vmin=-observed_limit, vmax=observed_limit
+        )
+        axes[1, column].imshow(
+            predicted, cmap="coolwarm", vmin=-predicted_limit, vmax=predicted_limit
+        )
+        axes[0, column].set_title(f"Observed bin {bin_index + 1}")
+        axes[1, column].set_title(f"Predicted bin {bin_index + 1}")
+        axes[0, column].axis("off")
+        axes[1, column].axis("off")
+    figure.tight_layout()
+    figure.savefig(output_dir / "06_temporal_iwe_bins.png")
+    plt.close(figure)
+
     reference_metrics = None
     if truth is not None:
         reference_metrics = {
             "aps_interpolation": _metrics(result.initial_aps, truth),
+            "event_only": _metrics(result.event_only, truth),
             "aps_only": _metrics(result.aps_only, truth),
             "joint": _metrics(result.joint, truth),
         }
@@ -240,6 +303,10 @@ def save_reconstruction_results(
         "motion": motion_metrics,
         "data_fidelity": _data_fidelity_metrics(result),
         "ground_truth_available": truth is not None,
+        "event_only_note": (
+            "Events constrain structure but not absolute log-intensity offset or scale; "
+            "a configured mean/std gauge is used without APS."
+        ),
         "metrics": reference_metrics,
     }
     write_json(output_dir / "run_summary.json", summary)

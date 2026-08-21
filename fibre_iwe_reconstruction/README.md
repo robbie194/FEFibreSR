@@ -1,63 +1,68 @@
 # Core-IWE 光纤仿真与真实数据兼容重建
 
-本目录实现一条独立的完整链路：生成原始光纤 APS/events，自主估计运动，再以 APS + core-IWE 重建连续、无蜂窝的有效图像。
+本目录是一条独立、完整的生成到重建链路：仿真原始光纤 APS/events，只用观测数据盲估计运动，再输出 event-only、APS-only 和 APS + core-IWE 三种连续无蜂窝重建。
 
-## 最重要的数据边界
+## 数据边界
 
-重建只允许读取：
+反演只读取：
 
 ```text
-outputs/baseline/observations/core_mask.npz
-outputs/baseline/observations/recording.h5
+<data-root>/observations/core_mask.npz
+<data-root>/observations/recording.h5
 ```
 
-- `core_mask.npz`：实测时可由一次 flat-field 图像分割得到，只包含 pixel-to-core labels；
-- `recording.h5`：一帧原始 APS、原始 events、曝光起止时间。
+- `core_mask.npz` 只包含 pixel-to-core `labels`；
+- `recording.h5` 包含一帧原始 APS、原始 `[t, x, y, p]` events 和曝光起止时间。
 
-仿真 GT、真值运动、事件阈值和仿真 PSF 位于 `private_truth/`。它们只在重建结束后评价结果，重建函数没有这些输入。
+仿真 GT、真值轨迹、事件阈值、PSF 和近端非均匀响应全部隔离在 `private_truth/`，反演完成后才可选读取用于评价。真实数据完全没有该目录也能运行。
 
-## 模型
-
-生成事件时，物理信息先被压缩为每芯标量强度 `c_i(t)`。事件的时间与极性来自该标量的 log 强度阈值跨越；event 在近端芯斑内的 `(x,y)` 按不规则固定概率随机分配，不携带远端亚纤芯位置。
-
-重建流程为：
+## 核心流程
 
 ```text
-raw events
+raw sensor events
   -> core mask 归属
-  -> 放到 core centre
-  -> 12 段低维轨迹 CMax
-  -> observed core-IWE
+  -> 芯内坐标替换为 core centre
+  -> CMax + APS/event 观测一致性估计 endpoint
+  -> 两参数平滑二维轨迹
+  -> 分时段 observed core-IWE
 
 candidate effective image
-  -> log gradient · 总位移
-  -> 乘连续 observability map
-  -> predicted IWE
+  -> 每时段 log-gradient · 2-D trajectory flow
+  -> predicted temporal IWE
 
 candidate effective image
-  -> 估计轨迹的 APS 时间平均
-  -> core centres 采样
+  -> 沿估计轨迹做曝光平均
+  -> core-centre sampling
   -> predicted core APS
 ```
 
-这里恢复的是已经吸收 GRIN、芯孔径和离焦影响的**有效图像**。第一版不需要已知 `h_eff`、逐 pixel 事件阈值、真值运动或仿真 gain。
+event-only 的**图像优化**只使用 events，不把 APS 放入图像 loss；但它与另外两个分支共享前一步由 APS/events 共同盲估计的运动。events 不能确定绝对 log-intensity 的 offset 和 scale，因此该分支使用配置中的固定 mean/std gauge。联合分支用 APS 补回低频和绝对亮度。
 
 ## 运行
 
+一维水平基线：
+
 ```bash
 cd /home/robbie/tyf_code/EventCode/myFEFibreSR/fibre_iwe_reconstruction
-/home/robbie/miniconda3/envs/NeuroFibreSR/bin/python run_pipeline.py
+/home/robbie/miniconda3/envs/NeuroFibreSR/bin/python run_pipeline.py \
+  --config configs/baseline.yaml
 ```
 
-仅使用已有观测重建：
+横纵同时变化的二维弯曲扫描：
 
 ```bash
 /home/robbie/miniconda3/envs/NeuroFibreSR/bin/python run_pipeline.py \
+  --config configs/two_dimensional.yaml
+```
+
+真实数据或已有观测：
+
+```bash
+/home/robbie/miniconda3/envs/NeuroFibreSR/bin/python run_pipeline.py \
+  --config configs/two_dimensional.yaml \
   --reuse-observations \
   --data-root /path/to/real_recording
 ```
-
-`/path/to/real_recording/observations/` 中只需放置 `core_mask.npz` 和 `recording.h5`。没有 `private_truth/` 时仍会保存全部重建结果，并使用 APS 重投影误差与 IWE cosine 一致性代替 GT 指标。
 
 测试：
 
@@ -65,19 +70,32 @@ cd /home/robbie/tyf_code/EventCode/myFEFibreSR/fibre_iwe_reconstruction
 /home/robbie/miniconda3/envs/NeuroFibreSR/bin/python -m unittest discover -s tests -v
 ```
 
-主要结果保存在 `outputs/baseline/results/`：生成观测、运动估计、重建对比、IWE/observability、loss、重投影和 `run_summary.json`。
+## 最终结果
 
-完整的数据边界、物理假设、定量结果与真实数据替换步骤见 [EXPERIMENT_REPORT.md](EXPERIMENT_REPORT.md)。仓库中保留了一份固定基线的可视化结果：
+| 场景 | APS interpolation | Event-only correlation | APS-only | APS + core-IWE |
+| --- | ---: | ---: | ---: | ---: |
+| 一维水平 | 19.73 dB | 0.8461 | 21.12 dB | **23.65 dB** |
+| 二维弯曲 | 19.56 dB | **0.9010** | 21.65 dB | **27.05 dB** |
 
-![APS、event 与联合重建对比](example_results/baseline/03_reconstruction_comparison.png)
+二维结果的 SSIM 为 `0.91091`，轨迹 control RMSE 为 `0.1777 px`。完整公式、定量表格和结果解释见 [EXPERIMENT_REPORT.md](EXPERIMENT_REPORT.md)。
+
+![二维重建对比](example_results/two_dimensional/03_reconstruction_comparison.png)
+
+## 保存结果
+
+每个场景的 `results/` 保存：
+
+- `event_only.npy`、`aps_only.npy`、`joint.npy`；
+- 盲运动控制点及 endpoint/path 搜索分数；
+- observed/predicted temporal IWE、二维 flow 和 observability；
+- 三种 loss history、APS 重投影和 `run_summary.json`；
+- 六张生成、运动、重建、IWE、loss 和分时段诊断图。
 
 ## 替换真实数据
 
-保持两个文件的字段不变即可，不需要修改重建算法：
+- flat-field 图像只用于分割 `labels`，背景为 0，每根芯为连续正整数；
+- `aps_frame` 转换为 `[0, 1]` 浮点强度；
+- events 按 timestamp 排序，polarity 转换为 `-1/+1`；
+- APS/events 必须使用同一 sensor 坐标和设备时钟。
 
-- 将真实 flat-field 图像分割为 `labels`，背景为 0、每芯为连续正整数；不保存或使用逐 pixel gain；
-- `recording.h5/events_t_s_x_y_p` 使用 `[timestamp_s, sensor_x, sensor_y, polarity]`；
-- `aps_frame` 预先转换为 `[0, 1]` 浮点强度，events 按 timestamp 排序且 polarity 为 `-1/+1`；
-- APS 与 events 使用同一 sensor shape 和设备时间基准。
-
-如果真实数据暴露明显的全局 APS/event 时间错位，再增加一个全局 delay；不默认引入逐 pixel 阈值、逐芯 PSF 或 transmission matrix。
+真实数据没有 GT 时，摘要中的 `metrics` 为 `null`，评价改用 APS 重投影、temporal IWE cosine、重复采集稳定性和分辨率靶可分辨线对。

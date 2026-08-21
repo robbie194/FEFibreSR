@@ -13,11 +13,17 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from fibre_iwe.data import load_core_observations
+from fibre_iwe.event_forward import (
+    build_event_forward_model,
+    normalised_event_loss,
+    predict_iwe_bins,
+)
 from fibre_iwe.geometry import centres_from_mask, generate_irregular_core_mask
 from fibre_iwe.io import CoreMask, Recording, save_core_mask, save_recording
 from fibre_iwe.output import save_reconstruction_results
 from fibre_iwe.reconstruction import ReconstructionResult
 from fibre_iwe.render import render_iwe, warp_events
+from fibre_iwe.simulation import _motion
 
 
 class CoreMaskTests(unittest.TestCase):
@@ -84,9 +90,14 @@ class RealDataOutputTests(unittest.TestCase):
             image,
             image,
             image,
+            image,
             iwe,
             iwe,
             np.ones(shape, dtype=np.float32),
+            iwe[None],
+            iwe[None],
+            np.ones((1, 2, *shape), dtype=np.float32),
+            history,
             history,
             history,
             aps_pairs,
@@ -119,6 +130,45 @@ class EventWarpTests(unittest.TestCase):
             (warped - torch.stack((base_x, base_y), dim=1)).mean(0).numpy(),
             [2.5, 1.0],
             atol=1e-5,
+        )
+
+
+class TwoDimensionalModelTests(unittest.TestCase):
+    def test_simulated_arc_has_exact_endpoint_and_transverse_motion(self) -> None:
+        times = np.linspace(0, 0.04, 101)
+        endpoint = np.array([4.0, 3.0], dtype=np.float32)
+        path = _motion(
+            times, {"end_shift_px": endpoint.tolist(), "curvature_px": 1.2}
+        )
+        np.testing.assert_allclose(path[0], [0, 0], atol=1e-6)
+        np.testing.assert_allclose(path[-1], endpoint, atol=1e-6)
+        linear_midpoint = 0.5 * endpoint
+        self.assertGreater(float(np.linalg.norm(path[50] - linear_midpoint)), 1.0)
+
+    def test_temporal_forward_uses_both_flow_components(self) -> None:
+        centres = torch.tensor([[8.0, 8.0], [16.0, 8.0], [8.0, 16.0], [16.0, 16.0]])
+        event_time = torch.tensor([0.15, 0.35, 0.65, 0.85])
+        event_xy = centres.clone()
+        polarity = torch.tensor([1.0, -1.0, 1.0, -1.0])
+        trajectory = torch.tensor([[0.0, 0.0], [2.0, 0.5], [3.0, 3.0]])
+        model = build_event_forward_model(
+            centres,
+            event_xy,
+            event_time,
+            polarity,
+            trajectory,
+            (24, 24),
+            sigma=0.8,
+            time_samples=8,
+            bin_count=2,
+        )
+        self.assertGreater(float(torch.linalg.vector_norm(model.flow_xy_bins[:, 0])), 0)
+        self.assertGreater(float(torch.linalg.vector_norm(model.flow_xy_bins[:, 1])), 0)
+        y, x = torch.meshgrid(torch.arange(24), torch.arange(24), indexing="ij")
+        image = 0.2 + 0.6 * (x + y).float() / 46
+        predicted = predict_iwe_bins(image, model.flow_xy_bins)
+        self.assertAlmostEqual(
+            float(normalised_event_loss(predicted, predicted)), 0.0, places=5
         )
 
 

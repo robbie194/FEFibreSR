@@ -45,12 +45,13 @@ def _prepare_object(config: ExperimentConfig) -> np.ndarray:
 def _motion(times: np.ndarray, motion_cfg: dict) -> np.ndarray:
     """A smooth, non-constant trajectory that the inverse never reads."""
     u = (times - times[0]) / (times[-1] - times[0])
-    end_x, end_y = map(float, motion_cfg["end_shift_px"])
+    endpoint = np.asarray(motion_cfg["end_shift_px"], dtype=np.float64)
     curvature = float(motion_cfg["curvature_px"])
     easing = u + 0.10 * np.sin(2 * np.pi * u) / (2 * np.pi)
-    x = end_x * easing
-    y = end_y * easing + curvature * np.sin(np.pi * u) ** 2
-    return np.column_stack((x, y)).astype(np.float32)
+    endpoint_norm = max(float(np.linalg.norm(endpoint)), 1e-8)
+    normal = np.array((-endpoint[1], endpoint[0])) / endpoint_norm
+    bend = curvature * np.sin(np.pi * u) ** 2
+    return (easing[:, None] * endpoint + bend[:, None] * normal).astype(np.float32)
 
 
 def _effective_sequence(

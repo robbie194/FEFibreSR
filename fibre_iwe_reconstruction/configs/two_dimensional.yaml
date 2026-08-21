@@ -1,6 +1,6 @@
 project:
-  output_dir: outputs/baseline
-  seed: 19
+  output_dir: outputs/two_dimensional
+  seed: 29
   device: cuda
 
 source:
@@ -21,9 +21,10 @@ recording:
   duration_s: 0.040
   sample_interval_s: 0.0001
 
+# Diagonal displacement plus a perpendicular arc gives changing x/y velocity.
 motion:
-  end_shift_px: [5.5, 0.0]
-  curvature_px: 0.0
+  end_shift_px: [5.5, 4.75]
+  curvature_px: 1.6
 
 # These values generate data but are deliberately unavailable to reconstruction.
 simulation_only:
@@ -38,7 +39,7 @@ motion_estimation:
   segment_count: 12
   coarse_search_radius_px: 8
   coarse_search_step_px: 1.0
-  coarse_displacement_regularization: 0.20
+  coarse_displacement_regularization: 0.12
   iwe_sigma_px: 1.0
   use_aps_event_endpoint_validation: true
   endpoint_validation_shape: [96, 96]
@@ -53,23 +54,23 @@ motion_estimation:
   path_validation_time_samples: 24
   path_validation_time_bins: 6
   path_validation_iwe_sigma_px: 1.0
-  path_curvature_search_px: [-2.0, 2.0, 0.25]
+  path_curvature_search_px: [-2.5, 2.5, 0.25]
   path_easing_search_px: [-0.4, 0.4, 0.1]
   path_refinement_step_px: 0.05
 
 reconstruction:
   multiscale_shapes: [[96, 96], [192, 192]]
-  iterations_per_scale: [250, 450]
-  event_only_iterations_per_scale: [300, 500]
+  iterations_per_scale: [300, 550]
+  event_only_iterations_per_scale: [350, 600]
   learning_rate: 0.025
-  event_weight: 0.005
-  regularization_weight: 0.003
+  event_weight: 0.008
+  regularization_weight: 0.004
   event_only_regularization_weight: 0.003
   event_only_gauge_weight: 0.20
   event_only_mean: 0.50
   event_only_std: 0.22
   aps_huber_beta: 0.03
-  aps_time_samples: 24
-  observability_time_samples: 48
-  event_time_bins: 1
+  aps_time_samples: 28
+  observability_time_samples: 64
+  event_time_bins: 8
   iwe_sigma_px: 1.0

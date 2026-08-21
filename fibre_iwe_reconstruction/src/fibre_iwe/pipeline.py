@@ -62,7 +62,7 @@ def run_pipeline(
         f"usable_events={len(observations.event_xy)}",
         flush=True,
     )
-    print("[3/4] estimating trajectory by core-IWE contrast", flush=True)
+    print("[3/4] estimating trajectory from APS/event consistency", flush=True)
     motion = estimate_motion(observations, config.values["motion_estimation"], device)
     print(
         f"      estimated endpoint={motion.control_positions_xy[-1].round(3).tolist()}",

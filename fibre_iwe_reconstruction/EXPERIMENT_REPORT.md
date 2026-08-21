@@ -1,112 +1,134 @@
-# Core-IWE 光纤仿真与盲重建实验报告
+# Core-IWE 一维/二维光纤盲重建实验报告
 
 ## 1. 实验目的
 
-本实验验证一条最小但完整的光纤重建链路：近端相机只提供一帧 APS、原始 events 和一次 core-mask 标定；算法不知道仿真运动、事件阈值、光学模糊和 GT，仍能先估计远端相对运动，再恢复连续、无蜂窝的有效图像。
+验证仅使用一张 core mask、原始 APS 和原始 events，能否在不知道真值运动、事件阈值、PSF、pixel gain 和 GT 的条件下：
 
-当前基线是**水平方向的一维微扫描超分辨实验**。它证明 core-IWE 思路可以工作，但不等同于已经覆盖任意二维运动和全部真实噪声。
+1. 盲估计一维或二维平滑微扫描轨迹；
+2. 分别完成 event-only 图像反演、APS-only 和 APS + core-IWE 重建；
+3. 恢复连续、无蜂窝的有效图像，并能直接替换真实观测。
 
 ## 2. 反演输入审计
 
-重建阶段只读取：
+| 反演可读取 | 内容 |
+| --- | --- |
+| `observations/core_mask.npz` | 只有 pixel-to-core `labels` |
+| `observations/recording.h5` | 原始 APS、`[t,x,y,p]` events、曝光时间 |
 
-| 文件 | 可观测内容 | 用途 |
-| --- | --- | --- |
-| `observations/core_mask.npz` | pixel-to-core labels | 确定芯归属、芯中心和 APS 芯强度 |
-| `observations/recording.h5` | 原始 APS、`[t, x, y, p]` events、曝光时间 | 运动估计和图像重建 |
+`private_truth/` 中的物体、运动、事件阈值、PSF、芯信号和近端响应只在全部反演结束后用于评价。实际测试还使用了一个完全没有 `private_truth/` 的独立目录，仍能生成全部重建和诊断结果。
 
-以下内容放在 `private_truth/`，只在反演完成后用于作图和评价：
+## 3. 两种仿真场景
 
-- 有效图像 GT；
-- 真实运动轨迹；
-- 仿真中的事件阈值、光学模糊、近端响应图和芯信号。
+| 场景 | 真值 endpoint | 曲率 | 原始 events | 目的 |
+| --- | ---: | ---: | ---: | --- |
+| 一维水平 | `[5.5, 0.0] px` | `0` | 5152 | 与原基线对照，验证单方向超分 |
+| 二维弯曲 | `[5.5, 4.75] px` | `1.6 px` | 7058 | 同时激发 x/y 梯度并改变速度方向 |
 
-代码边界位于 `src/fibre_iwe/pipeline.py`：先调用 `load_core_observations()`、`estimate_motion()` 和 `reconstruct()`，之后才尝试读取可选的 `private_truth`。因此评价真值没有泄漏到反演过程；真实数据完全没有该目录也能运行。
-
-## 3. 仿真是否接近真实光纤
-
-仿真先把远端连续图像经过共享有效模糊，再在运动过程中采样为每根芯的标量强度。每芯根据 log 强度阈值跨越产生 `(core_id, timestamp, polarity)`；传感器上的 `(x,y)` 则按该芯不规则、非均匀的固定亮斑随机分配。该近端响应图只用于生成并保存在 `private_truth`，反演不知道它。
-
-这比“把 event 的近端 pixel 坐标当成远端亚纤芯位置”更符合当前物理假设：芯内坐标只表示近端模式和传感器响应，不携带可直接反投影的远端空间坐标。
-
-它仍是受控模型，暂未完整模拟逐芯串扰、模式随时间变化、强烈非线性响应、背景漂移和事件相机 refractory effects。这些应通过真实数据残差决定是否加入，而不是一开始全部引入。
-
-## 4. 运动估计为什么需要 density-normalized CMax
-
-所有事件先通过 core mask 归属到纤芯，再放到对应 core centre。候选轨迹把事件 warp 到同一参考时刻，通过 IWE 聚焦程度评价轨迹。
-
-直接最大化普通 IWE 方差会失败：即使运动设为零，事件也已经落在清晰、规则的六角芯阵列上，算法会把“芯格本身很尖锐”误认为“运动补偿正确”。基线中该错误会得到接近零的位移，联合重建约为 `12.7 dB`。
-
-当前实现同时 warp 一张采样密度图，并以局部可观测密度归一化 IWE，再计算 density-weighted contrast。这样优化目标主要衡量同一物体边缘能否对齐，而不是芯阵列在哪里。粗搜索还加入很弱的位移先验，用于压制六角周期造成的别名解。
-
-最终流程为：endpoint 网格搜索、`0.25 px` 局部细化、固定 endpoint 的 12 段低维 CMax 优化。运动完全由观测事件得到。
-
-## 5. 图像重建前向模型
-
-待恢复量是连续的**有效图像**，未知的 GRIN、芯孔径和离焦模糊先吸收到该图像中。
-
-APS 分支使用估计轨迹对候选图像做曝光时间平均，再在 core centres 采样，与标定后的观测芯强度计算误差。
-
-event 分支使用一阶亮度变化关系：
+二维轨迹不是简单斜直线。生成器使用：
 
 $$
-I_{\mathrm{pred}}^{\mathrm{IWE}}(\mathbf{x})
-=
--\nabla \log O(\mathbf{x})\cdot\Delta\mathbf{u}\;W(\mathbf{x}),
+\mathbf{u}(t)
+= e(t)\mathbf{d}
++ \kappa\sin^2(\pi t)\mathbf{n},
 $$
 
-其中 $O$ 是候选有效图像，$\Delta\mathbf{u}$ 是 core-IWE 估计出的总位移，$W$ 是所有 core centres 沿估计轨迹扫过得到的连续 observability map。预测和观测 IWE 都做尺度归一化，因此第一版不需要知道事件阈值或逐 pixel gain。
+其中 $\mathbf{d}$ 为二维 endpoint，$\mathbf{n}$ 为其法向，$e(t)$ 为轻微非匀速时间函数。仿真轨迹只负责生成数据，反演不读取这些参数。
 
-优化采用 `96 x 96 -> 192 x 192` 两级网格，并联合 APS、一阶 event 约束和二阶平滑正则。输出是连续图像，不保留蜂窝采样结构。
+生成事件时，远端图像先成为每芯标量强度 $c_i(t)$，再按 log-intensity 阈值跨越产生 `(core_id,t,p)`。近端 event `(x,y)` 按不规则芯斑响应随机分配，只用于判断 `core_id`，不作为远端亚芯空间信息。
 
-## 6. 基线结果
+## 4. 盲运动估计
 
-固定随机种子下，完整运行得到：
+仅用普通 IWE 方差会偏好固定六角芯格，二维 endpoint 还可能落入晶格方向别名。当前使用三个简单步骤：
 
-- 芯数：`1098`；
-- 仿真原始事件：`5152`；mask 映射后的可用事件：`5119`；
-- 真实终点位移：`[5.5, 0.0] px`；
-- 盲估计终点位移：`[5.25, 0.0] px`；
-- endpoint error：`0.25 px`；
-- trajectory control RMSE：`0.1684 px`。
+1. density-normalized CMax 给出 endpoint 候选；
+2. 用粗 APS 预测候选轨迹下的 temporal IWE，与观测 events 比较，消除二维晶格别名；
+3. endpoint 固定后，只搜索法向曲率 $\kappa$ 和沿主方向的非匀速量 $a$：
+
+$$
+\mathbf{u}(t)
+=t\mathbf{d}
++\kappa\sin^2(\pi t)\mathbf{n}
++a\sin(2\pi t)\widehat{\mathbf{d}}.
+$$
+
+这只有两个内部轨迹自由度，比逐个优化 11 个内部控制点更稳定。两种观测 endpoint 相距小于 `1 px` 时用 CMax 做精定位；明显冲突时使用 APS/event consistency 避开晶格别名。整个过程不使用真值轨迹。
+
+最终运动误差：
+
+| 场景 | 估计 endpoint | Endpoint error | Control RMSE |
+| --- | ---: | ---: | ---: |
+| 一维水平 | `[5.25, 0.0] px` | `0.25 px` | `0.1270 px` |
+| 二维弯曲 | `[5.25, 4.75] px` | `0.25 px` | `0.1777 px` |
+
+## 5. 分时段二维 event 前向
+
+旧版只使用总位移 $\Delta\mathbf{u}$，会丢失弯曲轨迹中随时间变化的方向。当前把曝光分成时间段 $b$，将所有 core centres 沿该段轨迹 warp 到参考时刻，同时累计二维位移 flow：
+
+$$
+\mathbf{F}_b(\mathbf{x})
+=\sum_{i,t\in b}
+\Delta\mathbf{u}(t)\,
+K\!\left(\mathbf{x}-\mathbf{x}_{i,t}^{\mathrm{warp}}\right).
+$$
+
+候选有效图像 $O$ 的预测为：
+
+$$
+I_{b,\mathrm{pred}}^{\mathrm{IWE}}(\mathbf{x})
+=-\nabla\log O(\mathbf{x})\cdot\mathbf{F}_b(\mathbf{x}).
+$$
+
+每段预测和观测 IWE 使用能量加权 cosine loss，所以不需要已知事件阈值。二维场景使用 8 段，保留方向变化；一维场景使用 1 段，避免把单方向阈值残差放大。
+
+APS 分支沿估计轨迹对候选图像做曝光时间平均，再在 core centres 采样，与观测芯强度计算 Huber loss。联合优化采用 `96 x 96 -> 192 x 192` 两级网格和二阶平滑正则。
+
+## 6. Event-only 的物理含义
+
+event-only 的图像优化只使用 temporal core-IWE，图像 loss 不读取 APS；不过它复用前一步由 APS/events 共同估计的盲运动，因此这里的“event-only”是指图像反演约束，并不表示整条运动加图像流程完全不用 APS。events 能约束 log-image 梯度，却不能确定绝对 log-intensity offset 和全局对比度，因此使用固定 mean/std gauge。
+
+所以 event-only 的 correlation 和结构最有解释力，原始 PSNR 会被不可辨识的亮度尺度显著拉低。二维运动提供多个梯度方向，因此 event-only correlation 从一维的 `0.8461` 提升到 `0.9010`，水平积分条纹也明显减少。APS 的主要作用正是补回低频、绝对亮度和稳定对比度。
+
+## 7. 最终定量结果
+
+一维水平扫描：
 
 | 方法 | PSNR | SSIM | Correlation | RMSE |
 | --- | ---: | ---: | ---: | ---: |
 | APS interpolation | 19.7289 dB | 0.76633 | 0.94255 | 0.10317 |
-| APS-only optimization | 21.0099 dB | 0.79336 | 0.95293 | 0.08902 |
-| APS + core-IWE | **23.1101 dB** | **0.86451** | **0.97330** | **0.06990** |
+| Event-only | 10.0207 dB | 0.60804 | 0.84610 | 0.31548 |
+| APS-only | 21.1163 dB | 0.79678 | 0.95416 | 0.08794 |
+| APS + core-IWE | **23.6518 dB** | **0.87467** | **0.97558** | **0.06568** |
 
-相对 APS-only，联合结果提升约 `2.10 dB` PSNR 和 `0.071` SSIM。APS 重投影 RMSE 为 `0.001185`，观测/预测 IWE cosine 为 `0.97808`。说明在同一 APS 观测和同一图像参数化下，core-IWE 提供了有效的方向性边缘约束。
+二维弯曲扫描：
 
-![重建结果对比](example_results/baseline/03_reconstruction_comparison.png)
+| 方法 | PSNR | SSIM | Correlation | RMSE |
+| --- | ---: | ---: | ---: | ---: |
+| APS interpolation | 19.5624 dB | 0.74830 | 0.94327 | 0.10517 |
+| Event-only | 10.5980 dB | 0.72493 | 0.90099 | 0.29519 |
+| APS-only | 21.6518 dB | 0.79124 | 0.96043 | 0.08268 |
+| APS + core-IWE | **27.0523 dB** | **0.91091** | **0.98934** | **0.04440** |
 
-![运动估计](example_results/baseline/02_motion_estimation.png)
+二维联合重建相对 APS-only 提升 `5.40 dB` PSNR 和 `0.120` SSIM；相对旧的一维实现 `23.1101 dB / 0.86451`，新版一维也提升到 `23.6518 dB / 0.87467`。
 
-![IWE 与可观测区域](example_results/baseline/04_iwe_and_observability.png)
+二维数据一致性指标为：APS reprojection RMSE `0.000265`，aggregate IWE cosine `0.96630`，temporal IWE cosine `0.84565`。
 
-## 7. 当前简化是否合理
+![二维重建结果](example_results/two_dimensional/03_reconstruction_comparison.png)
 
-这些简化适合作为第一版真实数据模型：
+![二维运动估计](example_results/two_dimensional/02_motion_estimation.png)
 
-| 简化 | 当前处理 | 适用边界 |
-| --- | --- | --- |
-| 运动轨迹 | 由 core-IWE 盲估计 | 事件足够、运动能激发清晰边缘时可行 |
-| pixel gain、事件阈值 | 不读取仿真响应；每芯 APS 用中位数提取，IWE 做归一化 | 存在明显芯间系统偏差时再加逐芯权重 |
-| `h_eff` | 固定共享模糊，或吸收到有效图像 | 当前恢复的是有效图像，不声称得到去除全部光学模糊的物体 |
-| 芯内 event 位置 | 只用于 core 归属 | 不把近端芯斑内部位置解释为远端位置 |
-| APS/event delay | 默认零 | 只有观察到稳定错位时才估计一个全局 delay |
+![二维分时段 IWE](example_results/two_dimensional/06_temporal_iwe_bins.png)
 
-原始 `isl_diff_event_clean` 是通用 DAVIS/NeuroSR 模型，没有显式光纤 core mask、逐芯响应或芯内模式，因此也没有处理上述光纤专属项。这并不代表它们永远不重要，只说明第一版应先保留可辨识、可验证的最小参数集。
+## 8. 真实数据替换与边界
 
-## 8. 换成真实数据
+真实数据只需提供相同的两个观测文件，然后运行：
 
-真实实验只需保持两个观测文件的字段约定：
+```bash
+/home/robbie/miniconda3/envs/NeuroFibreSR/bin/python run_pipeline.py \
+  --config configs/two_dimensional.yaml \
+  --reuse-observations \
+  --data-root /path/to/real_recording
+```
 
-1. 用 flat-field 图像分割出 `core_mask.npz`，背景 label 为 0，每根芯为独立正整数；文件只保存 `labels`；
-2. 将原始 APS、events 和曝光时间写入 `recording.h5`，保证 APS/events 使用同一 sensor 坐标和设备时钟；
-3. 运行 `run_pipeline.py --reuse-observations --data-root /path/to/real_recording`，重建不读取任何仿真真值；
-4. 检查 core-IWE 聚焦、APS 重投影和结果稳定性。只有诊断显示系统性残差时，才依次增加全局 delay、逐芯 gain/threshold 或更复杂的 `h_eff`。
+当前两参数轨迹适合平滑机械微扫描。真实轨迹明显更复杂时，应增加少量平滑基函数，而不是恢复逐事件自由运动。真实数据出现稳定系统残差后，再依次考虑全局 APS/event delay、逐芯 gain/threshold 或更复杂的 `h_eff`；第一版不默认增加这些不可辨识参数。
 
-真实数据没有 GT 时不能报告 PSNR/SSIM，应改用 APS 重投影误差、event/IWE 一致性、重复采集稳定性，以及分辨率靶的可分辨线对作为证据。
-
-本实现已用一个只含上述两个观测文件、完全没有 `private_truth/` 的独立目录做过端到端验证：运动估计、联合重建、五张诊断图和 `run_summary.json` 均能正常生成，摘要中的 `metrics` 为 `null`，不会伪造 GT 评价。
+本实验仍未完整模拟逐芯串扰、模式随时间变化、强非线性响应、背景漂移和 refractory effects。二维结果证明了方法在受控物理仿真中的可行性，不应直接替代真实分辨率靶、重复采集和跨参数稳健性实验。

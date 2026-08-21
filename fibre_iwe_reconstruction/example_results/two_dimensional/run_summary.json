@@ -1,0 +1,76 @@
+{
+  "inverse_input_audit": {
+    "used": [
+      "observations/core_mask.npz (labels only)",
+      "observations/recording.h5"
+    ],
+    "not_used_by_reconstruction": [
+      "private_truth/object_effective_reference.npy",
+      "private_truth/motion_truth.npz",
+      "simulation event threshold",
+      "simulation PSF"
+    ]
+  },
+  "generation": {
+    "core_count": 1098,
+    "event_count": 7058,
+    "sensor_shape": [
+      192,
+      192
+    ],
+    "duration_s": 0.04
+  },
+  "motion": {
+    "initial_iwe_contrast": 0.162690669298172,
+    "final_iwe_contrast": 0.16227959096431732,
+    "estimated_endpoint_xy_px": [
+      5.25,
+      4.75
+    ],
+    "cmax_endpoint_xy_px": [
+      3.75,
+      7.25
+    ],
+    "aps_event_endpoint_xy_px": [
+      5.25,
+      4.75
+    ],
+    "estimated_curvature_px": 1.5,
+    "estimated_easing_px": -0.25,
+    "trajectory_control_rmse_px": 0.17772525264603647,
+    "endpoint_error_px": 0.25
+  },
+  "data_fidelity": {
+    "aps_reprojection_rmse": 0.00026451513986103237,
+    "iwe_cosine_similarity": 0.9662983473694852,
+    "temporal_iwe_cosine_similarity": 0.8456522226333618
+  },
+  "ground_truth_available": true,
+  "event_only_note": "Events constrain structure but not absolute log-intensity offset or scale; a configured mean/std gauge is used without APS.",
+  "metrics": {
+    "aps_interpolation": {
+      "psnr_db": 19.562423676825706,
+      "ssim": 0.7483034374376087,
+      "correlation": 0.9432746779601247,
+      "rmse": 0.10516683012247086
+    },
+    "event_only": {
+      "psnr_db": 10.598002903153532,
+      "ssim": 0.7249261508355971,
+      "correlation": 0.9009885916311849,
+      "rmse": 0.2951887845993042
+    },
+    "aps_only": {
+      "psnr_db": 21.65180410497975,
+      "ssim": 0.7912411275335802,
+      "correlation": 0.9604282098836193,
+      "rmse": 0.08268177509307861
+    },
+    "joint": {
+      "psnr_db": 27.052275648743542,
+      "ssim": 0.9109116550072213,
+      "correlation": 0.9893380398851404,
+      "rmse": 0.044400330632925034
+    }
+  }
+}
