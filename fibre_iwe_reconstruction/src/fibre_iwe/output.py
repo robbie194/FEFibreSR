@@ -1,0 +1,217 @@
+"""Diagnostics and evaluation kept separate from the inverse inputs."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+from skimage.metrics import peak_signal_noise_ratio, structural_similarity
+
+from .data import CoreObservations
+from .io import load_core_mask, load_recording, write_json
+from .motion import MotionEstimate
+from .reconstruction import ReconstructionResult
+
+
+def _normalise(image: np.ndarray) -> np.ndarray:
+    low, high = np.percentile(image, (1, 99))
+    return np.clip((image - low) / max(high - low, 1e-8), 0, 1)
+
+
+def _metrics(image: np.ndarray, truth: np.ndarray, border: int = 12) -> dict[str, float]:
+    candidate = image[border:-border, border:-border]
+    reference = truth[border:-border, border:-border]
+    return {
+        "psnr_db": float(peak_signal_noise_ratio(reference, candidate, data_range=1.0)),
+        "ssim": float(structural_similarity(reference, candidate, data_range=1.0)),
+        "correlation": float(np.corrcoef(reference.ravel(), candidate.ravel())[0, 1]),
+        "rmse": float(np.sqrt(np.mean((reference - candidate) ** 2))),
+    }
+
+
+def save_generation_preview(output_dir: Path, observations_dir: Path) -> None:
+    mask = load_core_mask(observations_dir / "core_mask.npz")
+    recording = load_recording(observations_dir / "recording.h5")
+    event_map = np.zeros(recording.sensor_shape, dtype=np.float32)
+    if len(recording.events):
+        x = recording.events[:, 1].astype(np.int32)
+        y = recording.events[:, 2].astype(np.int32)
+        np.add.at(event_map, (y, x), recording.events[:, 3])
+    figure, axes = plt.subplots(1, 3, figsize=(12, 4), dpi=180)
+    axes[0].imshow(mask.labels, cmap="turbo")
+    axes[0].set_title("Known core mask")
+    axes[1].imshow(recording.aps_frame, cmap="gray", vmin=0, vmax=1)
+    axes[1].set_title("Raw APS observation")
+    limit = np.percentile(np.abs(event_map), 99.5)
+    axes[2].imshow(event_map, cmap="coolwarm", vmin=-limit, vmax=limit)
+    axes[2].set_title("Raw sensor events")
+    for axis in axes:
+        axis.axis("off")
+    figure.tight_layout()
+    figure.savefig(output_dir / "01_generated_observations.png")
+    plt.close(figure)
+
+
+def save_motion_diagnostics(
+    output_dir: Path,
+    observations: CoreObservations,
+    motion: MotionEstimate,
+    truth_path: np.ndarray | None,
+) -> dict[str, float]:
+    from .render import render_iwe
+    import torch
+
+    device = torch.device("cpu")
+    xy = torch.as_tensor(observations.event_xy)
+    time = torch.as_tensor(observations.event_time_normalized)
+    polarity = torch.as_tensor(observations.event_polarity)
+    initial = torch.as_tensor(motion.initial_control_positions_xy)
+    final = torch.as_tensor(motion.control_positions_xy)
+    initial_iwe = render_iwe(
+        xy, time, polarity, initial, observations.sensor_shape, 1.0, signed=False
+    ).numpy()
+    final_iwe = render_iwe(
+        xy, time, polarity, final, observations.sensor_shape, 1.0, signed=False
+    ).numpy()
+    figure, axes = plt.subplots(1, 3, figsize=(12, 4), dpi=180)
+    axes[0].imshow(initial_iwe, cmap="magma")
+    axes[0].set_title("IWE after coarse motion")
+    axes[1].imshow(final_iwe, cmap="magma")
+    axes[1].set_title("IWE after CMax")
+    axes[2].plot(
+        motion.initial_control_positions_xy[:, 0],
+        motion.initial_control_positions_xy[:, 1],
+        "o--",
+        label="coarse",
+    )
+    axes[2].plot(
+        motion.control_positions_xy[:, 0],
+        motion.control_positions_xy[:, 1],
+        "o-",
+        label="estimated",
+    )
+    metrics: dict[str, float] = {
+        "initial_iwe_contrast": float(np.var(initial_iwe)),
+        "final_iwe_contrast": float(np.var(final_iwe)),
+    }
+    if truth_path is not None:
+        truth_time = np.linspace(0, 1, len(truth_path))
+        control_time = np.linspace(0, 1, len(motion.control_positions_xy))
+        truth_controls = np.column_stack(
+            [np.interp(control_time, truth_time, truth_path[:, axis]) for axis in range(2)]
+        )
+        truth_controls -= truth_controls[0]
+        axes[2].plot(truth_controls[:, 0], truth_controls[:, 1], "k-", label="truth")
+        metrics["trajectory_control_rmse_px"] = float(
+            np.sqrt(np.mean((motion.control_positions_xy - truth_controls) ** 2))
+        )
+        metrics["endpoint_error_px"] = float(
+            np.linalg.norm(motion.control_positions_xy[-1] - truth_controls[-1])
+        )
+    axes[2].invert_yaxis()
+    axes[2].axis("equal")
+    axes[2].legend(fontsize=8)
+    axes[2].set_title("Trajectory (evaluation truth optional)")
+    axes[0].axis("off")
+    axes[1].axis("off")
+    figure.tight_layout()
+    figure.savefig(output_dir / "02_motion_estimation.png")
+    plt.close(figure)
+    np.savez(
+        output_dir / "motion_estimate.npz",
+        initial_control_positions_xy=motion.initial_control_positions_xy,
+        control_positions_xy=motion.control_positions_xy,
+        loss_history=motion.loss_history,
+        coarse_scores=motion.coarse_scores,
+    )
+    return metrics
+
+
+def save_reconstruction_results(
+    output_dir: Path,
+    result: ReconstructionResult,
+    truth: np.ndarray,
+    generation_summary: dict,
+    motion_metrics: dict,
+) -> dict:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    arrays = {
+        "initial_aps": result.initial_aps,
+        "aps_only": result.aps_only,
+        "joint": result.joint,
+        "observed_iwe": result.observed_iwe,
+        "predicted_iwe": result.predicted_iwe,
+        "observability": result.observability,
+        "loss_history_aps": result.loss_history_aps,
+        "loss_history_joint": result.loss_history_joint,
+        "aps_observed_predicted": result.aps_observed_predicted,
+    }
+    for name, value in arrays.items():
+        np.save(output_dir / f"{name}.npy", value)
+    panels = (
+        ("Effective GT (evaluation only)", truth),
+        ("APS interpolation", result.initial_aps),
+        ("APS-only deblur", result.aps_only),
+        ("APS + core-IWE", result.joint),
+    )
+    figure, axes = plt.subplots(1, 4, figsize=(16, 4), dpi=200)
+    for axis, (title, image) in zip(axes, panels, strict=True):
+        axis.imshow(image, cmap="gray", vmin=0, vmax=1)
+        axis.set_title(title)
+        axis.axis("off")
+    figure.tight_layout()
+    figure.savefig(output_dir / "03_reconstruction_comparison.png")
+    plt.close(figure)
+
+    figure, axes = plt.subplots(1, 3, figsize=(12, 4), dpi=180)
+    limit_obs = np.percentile(np.abs(result.observed_iwe), 99.5)
+    limit_pred = np.percentile(np.abs(result.predicted_iwe), 99.5)
+    axes[0].imshow(result.observed_iwe, cmap="coolwarm", vmin=-limit_obs, vmax=limit_obs)
+    axes[0].set_title("Observed core-IWE")
+    axes[1].imshow(result.predicted_iwe, cmap="coolwarm", vmin=-limit_pred, vmax=limit_pred)
+    axes[1].set_title("Predicted gradient IWE")
+    axes[2].imshow(result.observability, cmap="viridis", vmin=0, vmax=1)
+    axes[2].set_title("Continuous observability map")
+    for axis in axes:
+        axis.axis("off")
+    figure.tight_layout()
+    figure.savefig(output_dir / "04_iwe_and_observability.png")
+    plt.close(figure)
+
+    figure, axes = plt.subplots(1, 2, figsize=(10, 4), dpi=180)
+    axes[0].plot(result.loss_history_joint[:, 0], result.loss_history_joint[:, 1], label="total")
+    axes[0].plot(result.loss_history_joint[:, 0], result.loss_history_joint[:, 2], label="APS")
+    axes[0].plot(result.loss_history_joint[:, 0], result.loss_history_joint[:, 3], label="IWE")
+    axes[0].legend(fontsize=8)
+    axes[0].set_title("Joint losses (per scale)")
+    axes[1].scatter(
+        result.aps_observed_predicted[:, 0], result.aps_observed_predicted[:, 1], s=3
+    )
+    axes[1].plot((0, 1), (0, 1), "k--", linewidth=1)
+    axes[1].set(xlabel="observed core APS", ylabel="predicted core APS", title="APS reprojection")
+    figure.tight_layout()
+    figure.savefig(output_dir / "05_loss_and_reprojection.png")
+    plt.close(figure)
+
+    summary = {
+        "inverse_input_audit": {
+            "used": ["observations/core_mask.npz", "observations/recording.h5"],
+            "not_used_by_reconstruction": [
+                "private_truth/object_effective_reference.npy",
+                "private_truth/motion_truth.npz",
+                "simulation event threshold",
+                "simulation PSF",
+            ],
+        },
+        "generation": generation_summary,
+        "motion": motion_metrics,
+        "metrics": {
+            "aps_interpolation": _metrics(result.initial_aps, truth),
+            "aps_only": _metrics(result.aps_only, truth),
+            "joint": _metrics(result.joint, truth),
+        },
+    }
+    write_json(output_dir / "run_summary.json", summary)
+    return summary

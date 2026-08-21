@@ -14,6 +14,7 @@ __pycache__/
 
 # Generated forward-simulation data (recreate with scripts/run_all.py)
 fibre_frame_event_sim/outputs/
+fibre_iwe_reconstruction/outputs/
 
 # Raw numerical reconstruction artifacts and execution logs
 isl_diff_event/results/**/*.npy
@@ -24,4 +25,3 @@ v2e/input/
 
 # Papers are local research references, not project source
 Paper/*.pdf
-

@@ -1,0 +1,49 @@
+{
+  "inverse_input_audit": {
+    "used": [
+      "observations/core_mask.npz",
+      "observations/recording.h5"
+    ],
+    "not_used_by_reconstruction": [
+      "private_truth/object_effective_reference.npy",
+      "private_truth/motion_truth.npz",
+      "simulation event threshold",
+      "simulation PSF"
+    ]
+  },
+  "generation": {
+    "core_count": 1098,
+    "event_count": 5152,
+    "sensor_shape": [
+      192,
+      192
+    ],
+    "duration_s": 0.04
+  },
+  "motion": {
+    "initial_iwe_contrast": 0.1248643547296524,
+    "final_iwe_contrast": 0.12576507031917572,
+    "trajectory_control_rmse_px": 0.16838859938778789,
+    "endpoint_error_px": 0.25
+  },
+  "metrics": {
+    "aps_interpolation": {
+      "psnr_db": 19.675610456606517,
+      "ssim": 0.7325659236157623,
+      "correlation": 0.9417404948196026,
+      "rmse": 0.1038052886724472
+    },
+    "aps_only": {
+      "psnr_db": 20.932952997438775,
+      "ssim": 0.7444608592852252,
+      "correlation": 0.9521128004783911,
+      "rmse": 0.08981572091579437
+    },
+    "joint": {
+      "psnr_db": 22.99745068373621,
+      "ssim": 0.8195982604974312,
+      "correlation": 0.9725782254906937,
+      "rmse": 0.07081536203622818
+    }
+  }
+}

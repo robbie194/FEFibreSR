@@ -1,0 +1,57 @@
+project:
+  output_dir: outputs/baseline
+  seed: 19
+  device: cuda
+
+source:
+  path: ../分辨率板.png
+  crop_center_px: [790, 789]
+  crop_size_px: 720
+  intensity_floor: 0.06
+
+sensor:
+  shape_px: [192, 192]
+
+fibre:
+  core_pitch_px: 5.5
+  margin_px: 12.0
+  proximal_spot_radius_px: 1.85
+
+recording:
+  duration_s: 0.040
+  sample_interval_s: 0.0001
+
+motion:
+  end_shift_px: [5.5, 0.0]
+  curvature_px: 0.0
+
+# These values generate data but are deliberately unavailable to reconstruction.
+simulation_only:
+  effective_blur_sigma_px: 0.9
+  aps_noise_sigma: 0.003
+  events:
+    contrast_threshold: 0.075
+    threshold_log_sigma: 0.07
+    background_noise_fraction: 0.01
+
+motion_estimation:
+  segment_count: 12
+  coarse_search_radius_px: 8
+  coarse_search_step_px: 1.0
+  coarse_displacement_regularization: 0.20
+  iwe_sigma_px: 1.0
+  max_optimization_events: 60000
+  iterations: 500
+  learning_rate: 0.02
+  smoothness_weight: 2.0
+
+reconstruction:
+  multiscale_shapes: [[96, 96], [192, 192]]
+  iterations_per_scale: [250, 450]
+  learning_rate: 0.025
+  event_weight: 0.015
+  regularization_weight: 0.004
+  aps_huber_beta: 0.03
+  aps_time_samples: 24
+  observability_time_samples: 48
+  iwe_sigma_px: 1.0

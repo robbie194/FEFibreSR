@@ -7,6 +7,9 @@ fibre imaging.
 
 - `fibre_frame_event_sim/`: reproducible USAF target to APS/event forward
   simulation, including configuration and unit tests.
+- `fibre_iwe_reconstruction/`: standalone raw-data simulation and blind
+  core-IWE reconstruction; only the calibrated core mask is shared across the
+  forward/inverse boundary.
 - `isl_diff_event/`: NeuroSR/IWE reconstruction research code and runnable
   `NeuroSRM_demo.py` experiment.
 - `v2e/`: vendored SensorsINI v2e event-camera simulator used by the forward
@@ -45,4 +48,3 @@ MPLBACKEND=Agg /home/robbie/miniconda3/envs/NeuroFibreSR/bin/python NeuroSRM_dem
 
 Display-ready results and a run summary are written under
 `isl_diff_event/results/fig/`. Large raw arrays and logs are excluded from Git.
-
